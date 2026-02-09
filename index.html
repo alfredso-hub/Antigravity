@@ -287,6 +287,43 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Tuning Mode Sections */
+        .tuning-section {
+            display: none;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .tuning-section.active {
+            display: block;
+        }
+
+        .pb-inputs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+
+        .vdot-display {
+            background: linear-gradient(135deg, var(--primary), #FFD60A);
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 15px;
+            box-shadow: 0 4px 12px rgba(255, 159, 10, 0.3);
+        }
+
+        .vdot-display .vdot-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
     </style>
 </head>
 
@@ -301,24 +338,21 @@
         <div class="card controls-section">
             <div class="controls-grid">
                 <div class="input-group">
-                    <label for="raceDistance">Reference Race</label>
-                    <select id="raceDistance">
-                        <option value="5k">5km</option>
-                        <option value="10k">10km</option>
+                    <label for="tuningMode">Tuning Mode</label>
+                    <select id="tuningMode">
+                        <option value="single">Single Race PB</option>
+                        <option value="allPbs">All PBs (Fitted)</option>
+                        <option value="goalTime">Goal Race Time</option>
                     </select>
-                </div>
-
-                <div class="input-group">
-                    <label for="raceTime">Time (MM:SS)</label>
-                    <input type="text" id="raceTime" placeholder="e.g. 25:00" value="25:00">
                 </div>
 
                 <div class="input-group">
                     <label for="planSelect">Select Plan</label>
                     <select id="planSelect">
-                        <option value="copenhagen_marathon">Copenhagen Marathon (15 Weeks)</option>
-                        <option value="5k_improver">5k Improver (8 Weeks)</option>
-                        <option value="10k_beginner">10k Beginner (10 Weeks)</option>
+                        <option value="copenhagen_marathon" data-distance="marathon">Copenhagen Marathon (15 Weeks)
+                        </option>
+                        <option value="5k_improver" data-distance="5k">5k Improver (8 Weeks)</option>
+                        <option value="10k_beginner" data-distance="10k">10k Beginner (10 Weeks)</option>
                     </select>
                 </div>
 
@@ -329,6 +363,62 @@
                         <option value="mi">Miles (min/mi)</option>
                     </select>
                 </div>
+            </div>
+
+            <!-- Single Race PB Mode -->
+            <div id="singlePbSection" class="tuning-section active">
+                <div class="controls-grid">
+                    <div class="input-group">
+                        <label for="raceDistance">Reference Race</label>
+                        <select id="raceDistance">
+                            <option value="5k">5km</option>
+                            <option value="10k">10km</option>
+                            <option value="half">Half Marathon</option>
+                            <option value="marathon">Marathon</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="raceTime">Time (MM:SS or HH:MM:SS)</label>
+                        <input type="text" id="raceTime" placeholder="e.g. 25:00" value="25:00">
+                    </div>
+                </div>
+            </div>
+
+            <!-- All PBs Mode -->
+            <div id="allPbsSection" class="tuning-section">
+                <div class="pb-inputs-grid">
+                    <div class="input-group">
+                        <label for="pb5k">5km PB</label>
+                        <input type="text" id="pb5k" placeholder="e.g. 20:00">
+                    </div>
+                    <div class="input-group">
+                        <label for="pb10k">10km PB</label>
+                        <input type="text" id="pb10k" placeholder="e.g. 42:00">
+                    </div>
+                    <div class="input-group">
+                        <label for="pbHalf">Half Marathon PB</label>
+                        <input type="text" id="pbHalf" placeholder="e.g. 1:32:00">
+                    </div>
+                    <div class="input-group">
+                        <label for="pbMarathon">Marathon PB</label>
+                        <input type="text" id="pbMarathon" placeholder="e.g. 3:15:00">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Goal Race Time Mode -->
+            <div id="goalTimeSection" class="tuning-section">
+                <div class="controls-grid">
+                    <div class="input-group">
+                        <label for="goalTime">Goal Time for <span id="goalRaceLabel">Marathon</span></label>
+                        <input type="text" id="goalTime" placeholder="e.g. 3:30:00">
+                    </div>
+                </div>
+            </div>
+
+            <div id="vdotDisplay" class="vdot-display" style="display: none;">
+                <span>VDOT:</span>
+                <span class="vdot-value" id="vdotValue">--</span>
             </div>
 
             <div class="pace-summary" id="paceSummary">
@@ -384,44 +474,71 @@
             return vo2Cost / percentMax;
         }
 
-        function calculatePaces(raceDist, timeSeconds) {
-            // 1. Determine Distance in Meters
-            let distMeters = 5000;
-            if (raceDist === '5k') distMeters = 5000;
-            else if (raceDist === '10k') distMeters = 10000;
-            else if (raceDist === 'half') distMeters = 21097.5;
-            else if (raceDist === 'marathon') distMeters = 42195;
-
-            // 2. Calculate VDOT
-            const timeMinutes = timeSeconds / 60;
-            const vdot = calculateVDOT(distMeters, timeMinutes);
-
-            // 3. Define Intensities (% of VDOT)
-            // Using standard approximate percentages for training
+        function calculatePacesFromVDOT(vdot) {
+            // Define Intensities (% of VDOT)
             const intensities = {
-                easy: 0.70,     // Range 65-78% approx
-                marathon: 0.82, // Range 75-84% approx
-                threshold: 0.88, // Range 83-88% approx
-                interval: 0.975, // Range 95-100% approx
-                repetition: 1.05 // >100%, usually based on mile pace but this approximates
+                easy: 0.70,
+                marathon: 0.82,
+                threshold: 0.88,
+                interval: 0.975,
+                repetition: 1.05
             };
 
             const paces = {};
-
             for (const [key, intensity] of Object.entries(intensities)) {
                 const targetVO2 = vdot * intensity;
                 const v = getVelocityFromVO2(targetVO2); // m/min
                 // Convert to sec/km: 1000 / v * 60
                 paces[key] = (1000 / v) * 60;
             }
-
-            // Add Race Pace (100% VDOT effectively for the entered distance, but let's base it on VDOT prediction
-            // actually race pace depends on the race distance. The chart usually shows 'R' as Repetition.
-            // We'll keep 'race' as the input race pace for reference if needed,
-            // but standard VDOT tables output E, M, T, I, R.
-            paces.race = timeSeconds / (distMeters / 1000);
-
             return paces;
+        }
+
+        // Legacy function for backwards compatibility
+        function calculatePaces(raceDist, timeSeconds) {
+            let distMeters = getDistanceMeters(raceDist);
+            const timeMinutes = timeSeconds / 60;
+            const vdot = calculateVDOT(distMeters, timeMinutes);
+            return calculatePacesFromVDOT(vdot);
+        }
+
+        function getDistanceMeters(raceDist) {
+            if (raceDist === '5k') return 5000;
+            if (raceDist === '10k') return 10000;
+            if (raceDist === 'half') return 21097.5;
+            if (raceDist === 'marathon') return 42195;
+            return 5000;
+        }
+
+        function getDistanceLabel(raceDist) {
+            if (raceDist === '5k') return '5km';
+            if (raceDist === '10k') return '10km';
+            if (raceDist === 'half') return 'Half Marathon';
+            if (raceDist === 'marathon') return 'Marathon';
+            return raceDist;
+        }
+
+        // Calculate average VDOT from multiple PBs
+        function calculateAverageVDOT(pbTimes) {
+            const vdots = [];
+            const distances = {
+                '5k': 5000,
+                '10k': 10000,
+                'half': 21097.5,
+                'marathon': 42195
+            };
+
+            for (const [key, distMeters] of Object.entries(distances)) {
+                const timeSec = pbTimes[key];
+                if (timeSec && timeSec > 0) {
+                    const timeMinutes = timeSec / 60;
+                    const vdot = calculateVDOT(distMeters, timeMinutes);
+                    vdots.push(vdot);
+                }
+            }
+
+            if (vdots.length === 0) return null;
+            return vdots.reduce((a, b) => a + b, 0) / vdots.length;
         }
 
         function formatTime(seconds) {
@@ -431,6 +548,7 @@
         }
 
         function parseTimeInput(str) {
+            if (!str || str.trim() === '') return 0;
             const parts = str.split(':');
             if (parts.length === 2) {
                 return (parseInt(parts[0]) * 60) + parseInt(parts[1]);
@@ -440,6 +558,7 @@
             }
             return 0;
         }
+
 
         // --- Plan Definitions ---
 
@@ -828,37 +947,112 @@
 
         // --- App Controller ---
         const ui = {
-            raceDist: document.getElementById('raceDist'),
-            raceTime: document.getElementById('raceTime'),
-            planSelect: document.getElementById('planSelect'),
-            units: document.getElementById('units'),
-            paceSummary: document.getElementById('paceSummary'),
-            planContainer: document.getElementById('planContainer'),
-
             init() {
-                // Listeners
-                ['input', 'change'].forEach(evt => {
-                    document.getElementById('raceDistance').addEventListener(evt, this.update);
-                    document.getElementById('raceTime').addEventListener(evt, this.update);
-                    document.getElementById('planSelect').addEventListener(evt, this.update);
-                    document.getElementById('units').addEventListener(evt, this.update);
+                // Mode switcher
+                const tuningMode = document.getElementById('tuningMode');
+                tuningMode.addEventListener('change', () => {
+                    this.updateTuningSection();
+                    this.update();
                 });
+
+                // Plan selector (updates goal race label)
+                document.getElementById('planSelect').addEventListener('change', () => {
+                    this.updateGoalRaceLabel();
+                    this.update();
+                });
+
+                // All input listeners
+                const inputs = [
+                    'raceDistance', 'raceTime', 'units',
+                    'pb5k', 'pb10k', 'pbHalf', 'pbMarathon',
+                    'goalTime'
+                ];
+                inputs.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        ['input', 'change'].forEach(evt => {
+                            el.addEventListener(evt, () => this.update());
+                        });
+                    }
+                });
+
+                this.updateTuningSection();
+                this.updateGoalRaceLabel();
                 this.update();
             },
 
-            update: () => {
-                const raceDist = document.getElementById('raceDistance').value;
-                const timeStr = document.getElementById('raceTime').value;
+            updateTuningSection() {
+                const mode = document.getElementById('tuningMode').value;
+                document.getElementById('singlePbSection').classList.toggle('active', mode === 'single');
+                document.getElementById('allPbsSection').classList.toggle('active', mode === 'allPbs');
+                document.getElementById('goalTimeSection').classList.toggle('active', mode === 'goalTime');
+            },
+
+            updateGoalRaceLabel() {
+                const planSelect = document.getElementById('planSelect');
+                const selectedOption = planSelect.options[planSelect.selectedIndex];
+                const distance = selectedOption.getAttribute('data-distance') || 'marathon';
+                document.getElementById('goalRaceLabel').textContent = getDistanceLabel(distance);
+            },
+
+            getVDOT() {
+                const mode = document.getElementById('tuningMode').value;
+
+                if (mode === 'single') {
+                    const raceDist = document.getElementById('raceDistance').value;
+                    const timeSec = parseTimeInput(document.getElementById('raceTime').value);
+                    if (!timeSec) return null;
+                    const distMeters = getDistanceMeters(raceDist);
+                    return calculateVDOT(distMeters, timeSec / 60);
+                }
+
+                if (mode === 'allPbs') {
+                    const pbTimes = {
+                        '5k': parseTimeInput(document.getElementById('pb5k').value),
+                        '10k': parseTimeInput(document.getElementById('pb10k').value),
+                        'half': parseTimeInput(document.getElementById('pbHalf').value),
+                        'marathon': parseTimeInput(document.getElementById('pbMarathon').value)
+                    };
+                    return calculateAverageVDOT(pbTimes);
+                }
+
+                if (mode === 'goalTime') {
+                    const planSelect = document.getElementById('planSelect');
+                    const selectedOption = planSelect.options[planSelect.selectedIndex];
+                    const distance = selectedOption.getAttribute('data-distance') || 'marathon';
+                    const goalTimeSec = parseTimeInput(document.getElementById('goalTime').value);
+                    if (!goalTimeSec) return null;
+                    const distMeters = getDistanceMeters(distance);
+                    return calculateVDOT(distMeters, goalTimeSec / 60);
+                }
+
+                return null;
+            },
+
+            update() {
+                const vdot = this.getVDOT();
                 const planSelect = document.getElementById('planSelect');
                 const planKey = planSelect ? planSelect.value : 'copenhagen_marathon';
-                const unit = document.getElementById('units').value; // 'km' or 'mi'
+                const unit = document.getElementById('units').value;
 
-                const timeSec = parseTimeInput(timeStr);
-                if (!timeSec) return;
+                // Display VDOT
+                const vdotDisplay = document.getElementById('vdotDisplay');
+                const vdotValue = document.getElementById('vdotValue');
+                if (vdot) {
+                    vdotDisplay.style.display = 'inline-flex';
+                    vdotValue.textContent = vdot.toFixed(1);
+                } else {
+                    vdotDisplay.style.display = 'none';
+                    vdotValue.textContent = '--';
+                }
 
-                // 1. Calculate Paces
-                // Base paces are in sec/km
-                const pacesKm = calculatePaces(raceDist, timeSec);
+                if (!vdot) {
+                    document.getElementById('paceSummary').innerHTML = '<div class="pace-chip"><span class="label">Enter valid times to see paces</span></div>';
+                    return;
+                }
+
+                // Calculate paces from VDOT
+                const pacesKm = calculatePacesFromVDOT(vdot);
 
                 // Convert to display unit
                 const conversion = unit === 'mi' ? 1.60934 : 1;
@@ -867,7 +1061,7 @@
                     pacesDisplay[k] = pacesKm[k] * conversion;
                 }
 
-                // 2. Render Pace Summary
+                // Render Pace Summary
                 const paceTypes = [
                     { key: 'easy', label: 'Easy (E)' },
                     { key: 'marathon', label: 'Marathon (M)' },
@@ -884,7 +1078,7 @@
             `).join('');
                 document.getElementById('paceSummary').innerHTML = html;
 
-                // 3. Render Plan
+                // Render Plan
                 const plan = plans[planKey];
                 if (!plan) return;
 
@@ -898,7 +1092,6 @@
 
                 let planHtml = '';
                 plan.weeks.forEach(week => {
-                    // Week Header Stats
                     let statsHtml = '';
                     if (week.stats) {
                         const formatStat = (val) => (val * conversion).toFixed(1);
@@ -915,12 +1108,8 @@
                     let daysHtml = '';
                     week.days.forEach(day => {
                         let desc = day.desc;
-                        // Inject calculated pace if applicable and NOT already in description (hacky check)
-                        // If description contains "@ T" or "@ M", we might want to append the actual pace value
                         if (day.pace && pacesDisplay[day.pace]) {
                             const p = formatTime(pacesDisplay[day.pace]);
-                            // If the description has the placeholder or tag, we can append the pace
-                            // For now, just append it for reference
                             desc += ` <span style="opacity:0.6; font-size:0.8em;">(${p}/${unit})</span>`;
                         }
 
