@@ -324,6 +324,39 @@
             font-size: 1.3rem;
             font-weight: 700;
         }
+
+        /* Drag and Drop */
+        .day-cell {
+            cursor: grab;
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+        }
+
+        .day-cell:active {
+            cursor: grabbing;
+        }
+
+        .day-cell.dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+
+        .day-cell.drag-over {
+            box-shadow: 0 0 0 2px var(--primary);
+            transform: scale(1.02);
+        }
+
+        .day-date {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+
+        .week-dates {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-left: auto;
+        }
     </style>
 </head>
 
@@ -372,6 +405,11 @@
                         <option value="km">Kilometers (min/km)</option>
                         <option value="mi">Miles (min/mi)</option>
                     </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="raceDate">Race Date</label>
+                    <input type="date" id="raceDate" value="2025-05-18">
                 </div>
             </div>
 
@@ -988,7 +1026,7 @@
 
                 // All input listeners
                 const inputs = [
-                    'raceDistance', 'raceTime', 'units',
+                    'raceDistance', 'raceTime', 'units', 'raceDate',
                     'pb5k', 'pb10k', 'pbHalf', 'pbMarathon',
                     'goalTime'
                 ];
@@ -1136,6 +1174,10 @@
                 const plan = plans[planKey];
                 if (!plan) return;
 
+                // Calculate dates (counting back from race date)
+                const raceDate = new Date(document.getElementById('raceDate').value);
+                const totalWeeks = plan.weeks.length;
+
                 // Render Chart if compatible data exists
                 if (plan.weeks && plan.weeks[0].stats) {
                     document.getElementById('planChart').style.display = 'block';
@@ -1144,8 +1186,23 @@
                     document.getElementById('planChart').style.display = 'none';
                 }
 
+                // Get saved session order from localStorage
+                const userId = document.getElementById('userSelect').value;
+                const savedOrder = JSON.parse(localStorage.getItem(`velocity_order_${userId}_${planKey}`) || '{}');
+
                 let planHtml = '';
-                plan.weeks.forEach(week => {
+                plan.weeks.forEach((week, weekIndex) => {
+                    // Calculate week start date (race date - remaining weeks * 7)
+                    const weeksUntilRace = totalWeeks - week.n;
+                    const weekStartDate = new Date(raceDate);
+                    weekStartDate.setDate(raceDate.getDate() - (weeksUntilRace * 7) - 6);
+
+                    // Get days in custom order if saved
+                    let days = [...week.days];
+                    if (savedOrder[week.n]) {
+                        days = savedOrder[week.n].map(idx => week.days[idx]);
+                    }
+
                     let statsHtml = '';
                     if (week.stats) {
                         const formatStat = (val) => (val * conversion).toFixed(1);
@@ -1159,8 +1216,19 @@
                     `;
                     }
 
+                    // Format week date range
+                    const weekEndDate = new Date(weekStartDate);
+                    weekEndDate.setDate(weekStartDate.getDate() + 6);
+                    const formatDate = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                    const weekDates = `${formatDate(weekStartDate)} – ${formatDate(weekEndDate)}`;
+
                     let daysHtml = '';
-                    week.days.forEach(day => {
+                    days.forEach((day, dayIndex) => {
+                        // Calculate actual date for this day
+                        const dayDate = new Date(weekStartDate);
+                        dayDate.setDate(weekStartDate.getDate() + dayIndex);
+                        const dayDateStr = dayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
                         let desc = day.desc;
                         if (day.pace && pacesDisplay[day.pace]) {
                             const p = formatTime(pacesDisplay[day.pace]);
@@ -1168,7 +1236,8 @@
                         }
 
                         daysHtml += `
-                        <div class="day-cell">
+                        <div class="day-cell" draggable="true" data-week="${week.n}" data-day="${dayIndex}">
+                            <div class="day-date">${dayDateStr}</div>
                             <div class="day-name">${day.day || 'Day'}</div>
                             <div class="workout-type type-${day.class}">${day.type}</div>
                             <div class="workout-detail">${desc}</div>
@@ -1177,9 +1246,10 @@
                     });
 
                     planHtml += `
-                    <div class="week-card">
+                    <div class="week-card" data-week="${week.n}">
                         <div class="week-header">
                             <div>Week ${week.n}</div>
+                            <div class="week-dates">${weekDates}</div>
                             ${statsHtml}
                         </div>
                         <div class="days-grid">
@@ -1190,6 +1260,72 @@
                 });
 
                 document.getElementById('planContainer').innerHTML = planHtml;
+
+                // Setup drag and drop
+                this.setupDragDrop(planKey);
+            },
+
+            setupDragDrop(planKey) {
+                const dayCells = document.querySelectorAll('.day-cell[draggable="true"]');
+                let draggedEl = null;
+
+                dayCells.forEach(cell => {
+                    cell.addEventListener('dragstart', (e) => {
+                        draggedEl = cell;
+                        cell.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                    });
+
+                    cell.addEventListener('dragend', () => {
+                        cell.classList.remove('dragging');
+                        document.querySelectorAll('.day-cell.drag-over').forEach(el => el.classList.remove('drag-over'));
+                    });
+
+                    cell.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        if (draggedEl && draggedEl !== cell && draggedEl.dataset.week === cell.dataset.week) {
+                            cell.classList.add('drag-over');
+                        }
+                    });
+
+                    cell.addEventListener('dragleave', () => {
+                        cell.classList.remove('drag-over');
+                    });
+
+                    cell.addEventListener('drop', (e) => {
+                        e.preventDefault();
+                        cell.classList.remove('drag-over');
+                        if (draggedEl && draggedEl !== cell && draggedEl.dataset.week === cell.dataset.week) {
+                            const weekNum = parseInt(cell.dataset.week);
+                            const grid = cell.closest('.days-grid');
+                            const cells = Array.from(grid.querySelectorAll('.day-cell'));
+                            const fromIdx = cells.indexOf(draggedEl);
+                            const toIdx = cells.indexOf(cell);
+
+                            // Reorder in DOM
+                            if (fromIdx < toIdx) {
+                                cell.after(draggedEl);
+                            } else {
+                                cell.before(draggedEl);
+                            }
+
+                            // Save new order to localStorage
+                            this.saveOrder(weekNum, planKey);
+                        }
+                    });
+                });
+            },
+
+            saveOrder(weekNum, planKey) {
+                const userId = document.getElementById('userSelect').value;
+                const key = `velocity_order_${userId}_${planKey}`;
+                const savedOrder = JSON.parse(localStorage.getItem(key) || '{}');
+
+                const grid = document.querySelector(`.week-card[data-week="${weekNum}"] .days-grid`);
+                const cells = Array.from(grid.querySelectorAll('.day-cell'));
+                savedOrder[weekNum] = cells.map(c => parseInt(c.dataset.day));
+
+                localStorage.setItem(key, JSON.stringify(savedOrder));
             }
         };
 
