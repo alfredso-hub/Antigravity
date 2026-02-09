@@ -11,17 +11,18 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --primary: #FF3B30;
-            /* Vibrant Red/Orange */
-            --primary-glow: rgba(255, 59, 48, 0.5);
-            --bg: #0F0F12;
-            --surface: #1C1C1E;
-            --surface-hover: #2C2C2E;
-            --text-main: #FFFFFF;
-            --text-secondary: #8E8E93;
-            --accent-blue: #0A84FF;
-            --accent-green: #30D158;
-            --border: rgba(255, 255, 255, 0.1);
+            --primary: #FF9F0A;
+            /* Sunny Orange */
+            --primary-glow: rgba(255, 159, 10, 0.5);
+            --bg: #FFFBE6;
+            /* Light Sunny Cream */
+            --surface: #FFFFFF;
+            --surface-hover: #FFF5CC;
+            --text-main: #333333;
+            --text-secondary: #666666;
+            --accent-blue: #007AFF;
+            --accent-green: #34C759;
+            --border: rgba(0, 0, 0, 0.1);
             --radius-lg: 24px;
             --radius-md: 16px;
             --radius-sm: 8px;
@@ -64,7 +65,7 @@
         h1 {
             font-size: 3rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #FFF, #AAA);
+            background: linear-gradient(135deg, #FF9F0A, #FFD60A);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -84,7 +85,7 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
             padding: 30px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
             backdrop-filter: blur(20px);
             transition: var(--transition);
         }
@@ -111,7 +112,7 @@
 
         input,
         select {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.03);
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
             padding: 16px;
@@ -125,8 +126,8 @@
         input:focus,
         select:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.1);
-            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 4px rgba(255, 159, 10, 0.1);
+            background: rgba(0, 0, 0, 0.05);
         }
 
         /* Plan Display */
@@ -150,7 +151,7 @@
         }
 
         .pace-chip {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.03);
             padding: 10px 16px;
             border-radius: var(--radius-md);
             font-size: 0.9rem;
@@ -177,21 +178,23 @@
         }
 
         .week-card {
-            background: rgba(255, 255, 255, 0.02);
+            background: var(--surface);
             border-radius: var(--radius-md);
             border: 1px solid var(--border);
             overflow: hidden;
             transition: var(--transition);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
         }
 
         .week-card:hover {
-            border-color: var(--text-secondary);
+            border-color: var(--primary);
             transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
         }
 
         .week-header {
             padding: 15px 20px;
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(0, 0, 0, 0.02);
             border-bottom: 1px solid var(--border);
             font-weight: 600;
             color: var(--text-secondary);
@@ -245,7 +248,8 @@
         }
 
         .type-long {
-            color: #FFD60A;
+            color: #E6B800;
+            /* Darker yellow for visibility on white */
         }
 
         .type-interval {
@@ -692,7 +696,7 @@
                 myChart.destroy();
             }
 
-            Chart.defaults.color = '#8E8E93';
+            Chart.defaults.color = '#333333';
             Chart.defaults.font.family = 'Outfit';
 
             myChart = new Chart(ctx, {
@@ -703,11 +707,11 @@
                         {
                             label: 'Total Distance',
                             data: dataTotal,
-                            borderColor: '#FFFFFF',
-                            backgroundColor: '#FFFFFF',
+                            borderColor: '#333333',
+                            backgroundColor: '#333333',
                             borderWidth: 2,
                             tension: 0.3,
-                            pointBackgroundColor: '#1C1C1E'
+                            pointBackgroundColor: '#FFFFFF'
                         },
                         {
                             label: 'LT Distance',
@@ -716,16 +720,16 @@
                             backgroundColor: '#FFD60A',
                             borderWidth: 2,
                             tension: 0.3,
-                            pointBackgroundColor: '#1C1C1E'
+                            pointBackgroundColor: '#FFFFFF'
                         },
                         {
                             label: 'AT Distance',
                             data: dataAT,
-                            borderColor: '#FF9F0A', // Orange
-                            backgroundColor: '#FF9F0A',
+                            borderColor: '#FF9500', // Orange
+                            backgroundColor: '#FF9500',
                             borderWidth: 2,
                             tension: 0.3,
-                            pointBackgroundColor: '#1C1C1E'
+                            pointBackgroundColor: '#FFFFFF'
                         },
                         {
                             label: 'Vo2 Distance',
@@ -734,7 +738,7 @@
                             backgroundColor: '#FF3B30',
                             borderWidth: 2,
                             tension: 0.3,
-                            pointBackgroundColor: '#1C1C1E'
+                            pointBackgroundColor: '#FFFFFF'
                         }
                     ]
                 },
@@ -748,23 +752,30 @@
                     plugins: {
                         legend: {
                             position: 'top',
+                            labels: {
+                                color: '#333333'
+                            }
                         },
                         tooltip: {
                             padding: 10,
-                            backgroundColor: 'rgba(28, 28, 30, 0.9)',
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#333',
+                            bodyColor: '#333',
                             titleFont: { size: 13 },
                             bodyFont: { size: 12 },
                             borderWidth: 1,
-                            borderColor: 'rgba(255,255,255,0.1)'
+                            borderColor: 'rgba(0,0,0,0.1)'
                         }
                     },
                     scales: {
                         x: {
-                            grid: { color: 'rgba(255,255,255,0.05)' }
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            ticks: { color: '#666' }
                         },
                         y: {
-                            grid: { color: 'rgba(255,255,255,0.05)' },
-                            title: { display: true, text: `Distance (${unit})` }
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            title: { display: true, text: `Distance (${unit})`, color: '#666' },
+                            ticks: { color: '#666' }
                         }
                     }
                 }
