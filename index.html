@@ -338,6 +338,16 @@
         <div class="card controls-section">
             <div class="controls-grid">
                 <div class="input-group">
+                    <label for="userSelect">User</label>
+                    <select id="userSelect">
+                        <option value="alfred">Alfred</option>
+                        <option value="david">David</option>
+                        <option value="erik">Erik</option>
+                        <option value="johannes">Johannes</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
                     <label for="tuningMode">Tuning Mode</label>
                     <select id="tuningMode">
                         <option value="single">Single Race PB</option>
@@ -946,11 +956,26 @@
         };
 
         // --- App Controller ---
+        let usersData = null;
+
         const ui = {
-            init() {
+            async init() {
+                // Load user data from JSON
+                try {
+                    const response = await fetch('users.json');
+                    usersData = await response.json();
+                } catch (e) {
+                    console.error('Failed to load users.json:', e);
+                    usersData = { users: {} };
+                }
+
+                // User selector listener
+                document.getElementById('userSelect').addEventListener('change', () => {
+                    this.loadUser();
+                });
+
                 // Mode switcher
-                const tuningMode = document.getElementById('tuningMode');
-                tuningMode.addEventListener('change', () => {
+                document.getElementById('tuningMode').addEventListener('change', () => {
                     this.updateTuningSection();
                     this.update();
                 });
@@ -976,7 +1001,36 @@
                     }
                 });
 
+                // Load initial user
+                this.loadUser();
+            },
+
+            loadUser() {
+                const userId = document.getElementById('userSelect').value;
+                const user = usersData?.users?.[userId];
+                if (!user) return;
+
+                // Set tuning mode
+                document.getElementById('tuningMode').value = user.tuningMode;
                 this.updateTuningSection();
+
+                // Set single PB fields
+                if (user.singlePb) {
+                    document.getElementById('raceDistance').value = user.singlePb.distance || '5k';
+                    document.getElementById('raceTime').value = user.singlePb.time || '';
+                }
+
+                // Set all PBs fields
+                if (user.allPbs) {
+                    document.getElementById('pb5k').value = user.allPbs['5k'] || '';
+                    document.getElementById('pb10k').value = user.allPbs['10k'] || '';
+                    document.getElementById('pbHalf').value = user.allPbs.half || '';
+                    document.getElementById('pbMarathon').value = user.allPbs.marathon || '';
+                }
+
+                // Set goal time
+                document.getElementById('goalTime').value = user.goalTime || '';
+
                 this.updateGoalRaceLabel();
                 this.update();
             },

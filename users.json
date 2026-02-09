@@ -1,0 +1,32 @@
+{
+  "users": {
+    "alfred": {
+      "name": "Alfred",
+      "tuningMode": "allPbs",
+      "singlePb": { "distance": "5k", "time": "" },
+      "allPbs": { "5k": "17:04", "10k": "34:54", "half": "1:19:05", "marathon": "2:54:22" },
+      "goalTime": ""
+    },
+    "david": {
+      "name": "David",
+      "tuningMode": "goalTime",
+      "singlePb": { "distance": "marathon", "time": "" },
+      "allPbs": { "5k": "", "10k": "", "half": "", "marathon": "" },
+      "goalTime": "3:00:00"
+    },
+    "erik": {
+      "name": "Erik",
+      "tuningMode": "goalTime",
+      "singlePb": { "distance": "marathon", "time": "" },
+      "allPbs": { "5k": "", "10k": "", "half": "", "marathon": "" },
+      "goalTime": "2:50:00"
+    },
+    "johannes": {
+      "name": "Johannes",
+      "tuningMode": "goalTime",
+      "singlePb": { "distance": "marathon", "time": "" },
+      "allPbs": { "5k": "", "10k": "", "half": "", "marathon": "" },
+      "goalTime": "2:50:00"
+    }
+  }
+}
