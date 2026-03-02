@@ -5,359 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Velocity | Running Planner</title>
+    <meta name="description" content="Intelligent adaptive running planner with VDOT-based pace calculations">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        :root {
-            --primary: #FF9F0A;
-            /* Sunny Orange */
-            --primary-glow: rgba(255, 159, 10, 0.5);
-            --bg: #FFFBE6;
-            /* Light Sunny Cream */
-            --surface: #FFFFFF;
-            --surface-hover: #FFF5CC;
-            --text-main: #333333;
-            --text-secondary: #666666;
-            --accent-blue: #007AFF;
-            --accent-green: #34C759;
-            --border: rgba(0, 0, 0, 0.1);
-            --radius-lg: 24px;
-            --radius-md: 16px;
-            --radius-sm: 8px;
-            --font-main: 'Outfit', sans-serif;
-            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: var(--font-main);
-            background-color: var(--bg);
-            color: var(--text-main);
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 40px 20px;
-            overflow-x: hidden;
-        }
-
-        .app-container {
-            width: 100%;
-            max-width: 1000px;
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
-        }
-
-        /* Header */
-        header {
-            text-align: center;
-            margin-bottom: 20px;
-            animation: fadeInDown 0.8s ease-out;
-        }
-
-        h1 {
-            font-size: 3rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #FF9F0A, #FFD60A);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
-            letter-spacing: -1px;
-        }
-
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            font-weight: 300;
-        }
-
-        /* Input Section */
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-            backdrop-filter: blur(20px);
-            transition: var(--transition);
-        }
-
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        label {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        input,
-        select {
-            background: rgba(0, 0, 0, 0.03);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            padding: 16px;
-            color: var(--text-main);
-            font-family: var(--font-main);
-            font-size: 1rem;
-            transition: var(--transition);
-            outline: none;
-        }
-
-        input:focus,
-        select:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(255, 159, 10, 0.1);
-            background: rgba(0, 0, 0, 0.05);
-        }
-
-        /* Plan Display */
-        .plan-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .plan-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-
-        .pace-summary {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-            margin-top: 20px;
-        }
-
-        .pace-chip {
-            background: rgba(0, 0, 0, 0.03);
-            padding: 10px 16px;
-            border-radius: var(--radius-md);
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border: 1px solid var(--border);
-        }
-
-        .pace-chip span.label {
-            color: var(--text-secondary);
-        }
-
-        .pace-chip span.value {
-            color: var(--primary);
-            font-weight: 600;
-        }
-
-        .weeks-container {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            margin-top: 30px;
-        }
-
-        .week-card {
-            background: var(--surface);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border);
-            overflow: hidden;
-            transition: var(--transition);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
-        }
-
-        .week-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
-        }
-
-        .week-header {
-            padding: 15px 20px;
-            background: rgba(0, 0, 0, 0.02);
-            border-bottom: 1px solid var(--border);
-            font-weight: 600;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .days-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 1px;
-            background: var(--border);
-            /* Creates grid lines */
-        }
-
-        .day-cell {
-            background: var(--surface);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            justify-content: space-between;
-        }
-
-        .day-name {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .workout-type {
-            font-weight: 600;
-            font-size: 1rem;
-            color: var(--text-main);
-        }
-
-        .workout-detail {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        /* Type specific colors */
-        .type-easy {
-            color: var(--accent-green);
-        }
-
-        .type-tempo {
-            color: var(--accent-blue);
-        }
-
-        .type-long {
-            color: #E6B800;
-            /* Darker yellow for visibility on white */
-        }
-
-        .type-interval {
-            color: var(--primary);
-        }
-
-        .type-rest {
-            color: var(--text-secondary);
-            opacity: 0.5;
-        }
-
-        /* Animations */
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @media (max-width: 600px) {
-            h1 {
-                font-size: 2rem;
-            }
-
-            .controls-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .days-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Tuning Mode Sections */
-        .tuning-section {
-            display: none;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border);
-        }
-
-        .tuning-section.active {
-            display: block;
-        }
-
-        .pb-inputs-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-        }
-
-        .vdot-display {
-            background: linear-gradient(135deg, var(--primary), #FFD60A);
-            color: #fff;
-            padding: 12px 20px;
-            border-radius: var(--radius-md);
-            font-weight: 600;
-            font-size: 1.1rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 15px;
-            box-shadow: 0 4px 12px rgba(255, 159, 10, 0.3);
-        }
-
-        .vdot-display .vdot-value {
-            font-size: 1.3rem;
-            font-weight: 700;
-        }
-
-        /* Drag and Drop */
-        .day-cell {
-            cursor: grab;
-            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
-        }
-
-        .day-cell:active {
-            cursor: grabbing;
-        }
-
-        .day-cell.dragging {
-            opacity: 0.5;
-            transform: scale(0.95);
-        }
-
-        .day-cell.drag-over {
-            box-shadow: 0 0 0 2px var(--primary);
-            transform: scale(1.02);
-        }
-
-        .day-date {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            margin-bottom: 4px;
-            font-weight: 500;
-        }
-
-        .week-dates {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            margin-left: auto;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
@@ -366,972 +19,186 @@
         <header>
             <h1>Velocity</h1>
             <div class="subtitle">Intelligent Adaptive Running Planner</div>
+            <div id="authContainer" class="auth-container"></div>
         </header>
 
-        <div class="card controls-section">
-            <div class="controls-grid">
-                <div class="input-group">
-                    <label for="userSelect">User</label>
-                    <select id="userSelect">
-                        <option value="alfred">Alfred</option>
-                        <option value="david">David</option>
-                        <option value="erik">Erik</option>
-                        <option value="johannes">Johannes</option>
-                    </select>
-                </div>
-
-                <div class="input-group">
-                    <label for="tuningMode">Tuning Mode</label>
-                    <select id="tuningMode">
-                        <option value="single">Single Race PB</option>
-                        <option value="allPbs">All PBs (Fitted)</option>
-                        <option value="goalTime">Goal Race Time</option>
-                    </select>
-                </div>
-
-                <div class="input-group">
-                    <label for="planSelect">Select Plan</label>
-                    <select id="planSelect">
-                        <option value="copenhagen_marathon" data-distance="marathon">Copenhagen Marathon (15 Weeks)
-                        </option>
-                        <option value="5k_improver" data-distance="5k">5k Improver (8 Weeks)</option>
-                        <option value="10k_beginner" data-distance="10k">10k Beginner (10 Weeks)</option>
-                    </select>
-                </div>
-
-                <div class="input-group">
-                    <label for="units">Units</label>
-                    <select id="units">
-                        <option value="km">Kilometers (min/km)</option>
-                        <option value="mi">Miles (min/mi)</option>
-                    </select>
-                </div>
-
-                <div class="input-group">
-                    <label for="raceDate">Race Date</label>
-                    <input type="date" id="raceDate" value="2026-05-10">
-                </div>
-            </div>
-
-            <!-- Single Race PB Mode -->
-            <div id="singlePbSection" class="tuning-section active">
-                <div class="controls-grid">
-                    <div class="input-group">
-                        <label for="raceDistance">Reference Race</label>
-                        <select id="raceDistance">
-                            <option value="5k">5km</option>
-                            <option value="10k">10km</option>
-                            <option value="half">Half Marathon</option>
-                            <option value="marathon">Marathon</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
-                        <label for="raceTime">Time (MM:SS or HH:MM:SS)</label>
-                        <input type="text" id="raceTime" placeholder="e.g. 25:00" value="25:00">
-                    </div>
-                </div>
-            </div>
-
-            <!-- All PBs Mode -->
-            <div id="allPbsSection" class="tuning-section">
-                <div class="pb-inputs-grid">
-                    <div class="input-group">
-                        <label for="pb5k">5km PB</label>
-                        <input type="text" id="pb5k" placeholder="e.g. 20:00">
-                    </div>
-                    <div class="input-group">
-                        <label for="pb10k">10km PB</label>
-                        <input type="text" id="pb10k" placeholder="e.g. 42:00">
-                    </div>
-                    <div class="input-group">
-                        <label for="pbHalf">Half Marathon PB</label>
-                        <input type="text" id="pbHalf" placeholder="e.g. 1:32:00">
-                    </div>
-                    <div class="input-group">
-                        <label for="pbMarathon">Marathon PB</label>
-                        <input type="text" id="pbMarathon" placeholder="e.g. 3:15:00">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Goal Race Time Mode -->
-            <div id="goalTimeSection" class="tuning-section">
-                <div class="controls-grid">
-                    <div class="input-group">
-                        <label for="goalTime">Goal Time for <span id="goalRaceLabel">Marathon</span></label>
-                        <input type="text" id="goalTime" placeholder="e.g. 3:30:00">
-                    </div>
-                </div>
-            </div>
-
-            <div id="vdotDisplay" class="vdot-display" style="display: none;">
-                <span>VDOT:</span>
-                <span class="vdot-value" id="vdotValue">--</span>
-            </div>
-
-            <div class="pace-summary" id="paceSummary">
-                <!-- Paces injected here -->
+        <!-- Login Prompt (shown when not authenticated) -->
+        <div id="loginPrompt" class="login-prompt" style="display:none;">
+            <div class="card login-card">
+                <div class="login-icon">🏃‍♂️</div>
+                <h2>Welcome to Velocity</h2>
+                <p>Sign in to access your personalized training plans, save your paces, and track your progress.</p>
+                <div id="loginBtnContainer"></div>
             </div>
         </div>
 
-        <div class="card controls-section" style="margin-bottom: 20px;">
-            <!-- Chart Container -->
-            <div style="position: relative; height:300px; width:100%;">
-                <canvas id="planChart"></canvas>
-            </div>
-        </div>
+        <!-- App Content (shown when authenticated) -->
+        <div id="appContent" style="display:none;">
 
-        <div id="planContainer" class="weeks-container">
-            <!-- Weeks injected here -->
+            <!-- Tab Navigation -->
+            <div class="tab-bar">
+                <button class="tab-btn active" data-tab="planViewTab">
+                    <span class="tab-icon">📋</span> My Plan
+                </button>
+                <button class="tab-btn" data-tab="createPlanTab">
+                    <span class="tab-icon">✨</span> Create Plan
+                </button>
+            </div>
+
+            <!-- ═══ PLAN VIEW TAB ═══ -->
+            <div id="planViewTab" class="tab-content active">
+
+                <div class="card controls-section">
+                    <div class="controls-grid">
+                        <div class="input-group">
+                            <label for="tuningMode">Tuning Mode</label>
+                            <select id="tuningMode">
+                                <option value="single">Single Race PB</option>
+                                <option value="allPbs">All PBs (Fitted)</option>
+                                <option value="goalTime">Goal Race Time</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="planSelect">Select Plan</label>
+                            <select id="planSelect">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="units">Units</label>
+                            <select id="units">
+                                <option value="km">Kilometers (min/km)</option>
+                                <option value="mi">Miles (min/mi)</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="raceDate">Race Date</label>
+                            <input type="date" id="raceDate" value="2026-05-10">
+                        </div>
+                    </div>
+
+                    <!-- Single Race PB Mode -->
+                    <div id="singlePbSection" class="tuning-section active">
+                        <div class="controls-grid">
+                            <div class="input-group">
+                                <label for="raceDistance">Reference Race</label>
+                                <select id="raceDistance">
+                                    <option value="5k">5km</option>
+                                    <option value="10k">10km</option>
+                                    <option value="half">Half Marathon</option>
+                                    <option value="marathon">Marathon</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="raceTime">Time (MM:SS or HH:MM:SS)</label>
+                                <input type="text" id="raceTime" placeholder="e.g. 25:00" value="25:00">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- All PBs Mode -->
+                    <div id="allPbsSection" class="tuning-section">
+                        <div class="pb-inputs-grid">
+                            <div class="input-group">
+                                <label for="pb5k">5km PB</label>
+                                <input type="text" id="pb5k" placeholder="e.g. 20:00">
+                            </div>
+                            <div class="input-group">
+                                <label for="pb10k">10km PB</label>
+                                <input type="text" id="pb10k" placeholder="e.g. 42:00">
+                            </div>
+                            <div class="input-group">
+                                <label for="pbHalf">Half Marathon PB</label>
+                                <input type="text" id="pbHalf" placeholder="e.g. 1:32:00">
+                            </div>
+                            <div class="input-group">
+                                <label for="pbMarathon">Marathon PB</label>
+                                <input type="text" id="pbMarathon" placeholder="e.g. 3:15:00">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Goal Race Time Mode -->
+                    <div id="goalTimeSection" class="tuning-section">
+                        <div class="controls-grid">
+                            <div class="input-group">
+                                <label for="goalTime">Goal Time for <span id="goalRaceLabel">Marathon</span></label>
+                                <input type="text" id="goalTime" placeholder="e.g. 3:30:00">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="save-row">
+                        <div id="vdotDisplay" class="vdot-display" style="display: none;">
+                            <span>VDOT:</span>
+                            <span class="vdot-value" id="vdotValue">--</span>
+                        </div>
+                        <button id="savePacesBtn" class="btn btn-primary">Save</button>
+                    </div>
+
+                    <div class="pace-summary" id="paceSummary">
+                        <!-- Paces injected here -->
+                    </div>
+                </div>
+
+                <div class="card controls-section" style="margin-bottom: 20px;">
+                    <div style="position: relative; height:300px; width:100%;">
+                        <canvas id="planChart"></canvas>
+                    </div>
+                </div>
+
+                <div id="planContainer" class="weeks-container">
+                    <!-- Weeks injected here -->
+                </div>
+            </div>
+
+            <!-- ═══ CREATE PLAN TAB ═══ -->
+            <div id="createPlanTab" class="tab-content">
+                <div class="card">
+                    <h2 class="section-title">Create a New Training Plan</h2>
+                    <p style="color:var(--text-secondary);margin-bottom:24px;">Build a custom plan that all users can
+                        access.</p>
+
+                    <form id="createPlanForm">
+                        <div class="controls-grid" style="margin-bottom:24px;">
+                            <div class="input-group">
+                                <label for="newPlanName">Plan Name</label>
+                                <input type="text" id="newPlanName" placeholder="e.g. Spring Marathon 12-Week" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="newPlanDistance">Target Distance</label>
+                                <select id="newPlanDistance" required>
+                                    <option value="5k">5km</option>
+                                    <option value="10k">10km</option>
+                                    <option value="half">Half Marathon</option>
+                                    <option value="marathon" selected>Marathon</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="weekInputsContainer">
+                            <!-- Week input cards added dynamically -->
+                        </div>
+
+                        <div class="create-plan-actions">
+                            <button type="button" id="addWeekBtn" class="btn btn-secondary">
+                                + Add Week
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                Create Plan
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
         </div>
     </div>
-    <script>
-        // --- Data & Logic ---
 
-        // Daniels VDOT Formulas
-        const VDOT_VARS = {
-            a: 0.000104,
-            b: 0.182258,
-            c_offset: 4.60
-        };
-
-        function getVelocityFromVO2(vo2) {
-            // v = (-b + sqrt(b^2 - 4ac)) / 2a where c = -(vo2 + 4.60)
-            // 0.000104 * v^2 + 0.182258 * v - (vo2 + 4.60) = 0
-            const a = VDOT_VARS.a;
-            const b = VDOT_VARS.b;
-            const c = -(vo2 + VDOT_VARS.c_offset);
-
-            const root = Math.sqrt(b * b - 4 * a * c);
-            return (-b + root) / (2 * a); // meters per minute
-        }
-
-        function getVO2FromVelocity(v) {
-            // VO2 = -4.60 + 0.182258 * v + 0.000104 * v^2
-            return -VDOT_VARS.c_offset + VDOT_VARS.b * v + VDOT_VARS.a * v * v;
-        }
-
-        function calculateVDOT(distanceMeters, timeMinutes) {
-            const v = distanceMeters / timeMinutes;
-            const vo2Cost = getVO2FromVelocity(v);
-
-            // %VO2max = 0.8 + 0.1894393 * exp(-0.012778 * t) + 0.2989558 * exp(-0.1932605 * t)
-            const t = timeMinutes;
-            const percentMax = 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t);
-
-            return vo2Cost / percentMax;
-        }
-
-        function calculatePacesFromVDOT(vdot) {
-            // Define Intensities (% of VDOT)
-            const intensities = {
-                easy: 0.70,
-                marathon: 0.82,
-                threshold: 0.88,
-                interval: 0.975,
-                repetition: 1.05
-            };
-
-            const paces = {};
-            for (const [key, intensity] of Object.entries(intensities)) {
-                const targetVO2 = vdot * intensity;
-                const v = getVelocityFromVO2(targetVO2); // m/min
-                // Convert to sec/km: 1000 / v * 60
-                paces[key] = (1000 / v) * 60;
-            }
-            return paces;
-        }
-
-        // Legacy function for backwards compatibility
-        function calculatePaces(raceDist, timeSeconds) {
-            let distMeters = getDistanceMeters(raceDist);
-            const timeMinutes = timeSeconds / 60;
-            const vdot = calculateVDOT(distMeters, timeMinutes);
-            return calculatePacesFromVDOT(vdot);
-        }
-
-        function getDistanceMeters(raceDist) {
-            if (raceDist === '5k') return 5000;
-            if (raceDist === '10k') return 10000;
-            if (raceDist === 'half') return 21097.5;
-            if (raceDist === 'marathon') return 42195;
-            return 5000;
-        }
-
-        function getDistanceLabel(raceDist) {
-            if (raceDist === '5k') return '5km';
-            if (raceDist === '10k') return '10km';
-            if (raceDist === 'half') return 'Half Marathon';
-            if (raceDist === 'marathon') return 'Marathon';
-            return raceDist;
-        }
-
-        // Calculate average VDOT from multiple PBs
-        function calculateAverageVDOT(pbTimes) {
-            const vdots = [];
-            const distances = {
-                '5k': 5000,
-                '10k': 10000,
-                'half': 21097.5,
-                'marathon': 42195
-            };
-
-            for (const [key, distMeters] of Object.entries(distances)) {
-                const timeSec = pbTimes[key];
-                if (timeSec && timeSec > 0) {
-                    const timeMinutes = timeSec / 60;
-                    const vdot = calculateVDOT(distMeters, timeMinutes);
-                    vdots.push(vdot);
-                }
-            }
-
-            if (vdots.length === 0) return null;
-            return vdots.reduce((a, b) => a + b, 0) / vdots.length;
-        }
-
-        function formatTime(seconds) {
-            const min = Math.floor(seconds / 60);
-            const sec = Math.floor(seconds % 60);
-            return `${min}:${sec.toString().padStart(2, '0')}`;
-        }
-
-        function parseTimeInput(str) {
-            if (!str || str.trim() === '') return 0;
-            const parts = str.split(':');
-            if (parts.length === 2) {
-                return (parseInt(parts[0]) * 60) + parseInt(parts[1]);
-            }
-            if (parts.length === 3) {
-                return (parseInt(parts[0]) * 3600) + (parseInt(parts[1]) * 60) + parseInt(parts[2]);
-            }
-            return 0;
-        }
-
-
-        // --- Plan Definitions ---
-
-        const copenhagenCSV = `Week,Day,Session Type,Description,Total Distance (km),LT Distance (km),AT Distance (km),Above AT Distance (km)
-1,Mon,Easy,"12 km Easy + strides",12.0,0.0,0.0,1.0
-1,Tue,Quality (T),"3×12 min @ T (3 min jog)",15.0,0.0,9.7,0.0
-1,Wed,Easy,"12 km Easy",12.0,0.0,0.0,0.0
-1,Thu,Quality (I),"6×1 km @ I + 4×200 m @ R",14.0,0.0,0.0,6.8
-1,Fri,Easy,"10 km Easy + Strength",10.0,0.0,0.0,0.0
-1,Sat,Long,"26 km Long (easy-steady)",26.0,0.0,0.0,0.0
-1,Sun,Recovery,"8–10 km Recovery",9.0,0.0,0.0,0.0
-2,Mon,Easy,"14 km Easy + strides",14.0,0.0,0.0,1.0
-2,Tue,Quality (T),"4×10 min @ T",16.0,0.0,10.8,0.0
-2,Wed,Easy,"12 km Easy",12.0,0.0,0.0,0.0
-2,Thu,Quality (I),"5×1.2 km @ I + 4×200 m @ R",14.0,0.0,0.0,6.8
-2,Fri,Easy,"10 km Easy + Strength",10.0,0.0,0.0,0.0
-2,Sat,Long,"28 km Long (last 5 km steady)",28.0,0.0,0.0,0.0
-2,Sun,Recovery,"8 km Recovery",8.0,0.0,0.0,0.0
-3,Mon,Easy,"14 km Easy",14.0,0.0,0.0,0.0
-3,Tue,Quality (T),"2×20 min @ T",16.0,0.0,10.8,0.0
-3,Wed,Easy,"12 km Easy",12.0,0.0,0.0,0.0
-3,Thu,Quality (I),"6×1 km @ I",12.0,0.0,0.0,6.0
-3,Fri,Easy,"10 km Easy + Strength",10.0,0.0,0.0,0.0
-3,Sat,Long,"30 km Long (progressive final 6-8 km)",30.0,0.0,0.0,0.0
-3,Sun,Recovery,"8 km Recovery",8.0,0.0,0.0,0.0
-4,Mon,Easy,"14 km Easy + strides",14.0,0.0,0.0,1.0
-4,Tue,Quality (T),"3×15 min @ T",17.5,0.0,12.2,0.0
-4,Wed,Easy,"12 km Easy",12.0,0.0,0.0,0.0
-4,Thu,Quality (I),"8×800 m @ I",13.0,0.0,0.0,6.4
-4,Fri,Easy,"10 km Easy + Strength",10.0,0.0,0.0,0.0
-4,Sat,Long,"32 km Long (steady, controlled)",32.0,0.0,0.0,0.0
-4,Sun,Recovery,"8 km Recovery",8.0,0.0,0.0,0.0
-5,Mon,Easy,"12 km Easy",12.0,0.0,0.0,0.0
-5,Tue,Quality (T),"3×10 min @ T",13.5,0.0,8.1,0.0
-5,Wed,Easy,"10 km Easy",10.0,0.0,0.0,0.0
-5,Thu,Quality (I),"5×1 km @ I",11.0,0.0,0.0,5.0
-5,Fri,Easy,"10 km Easy + Strength",10.0,0.0,0.0,0.0
-5,Sat,Long,"26 km Long (relaxed)",26.0,0.0,0.0,0.0
-5,Sun,Recovery,"8 km Recovery",8.0,0.0,0.0,0.0
-6,Tue,Steady,"14 km Aerobic steady (upper E, relaxed)",14.0,0.0,0.0,0.0
-6,Thu,Quality (T),"25 min continuous @ T inside 14–15 km total",15.0,0.0,6.8,0.0
-6,Sat,Long,"30 km Long Run – last 8 km @ M",30.0,8.0,0.0,0.0
-6,Other,Easy,"Fill remaining days with Easy runs",31.0,0.0,0.0,0.0
-7,Tue,Easy,"14 km Easy + strides",14.0,0.0,0.0,1.0
-7,Thu,Quality (T),"2×15 min @ T (3 min jog)",15.0,0.0,8.1,0.0
-7,Sat,Long,"32 km Long Run – 2×6 km @ M (3 km easy between)",32.0,12.0,0.0,0.0
-7,Other,Easy,"Fill remaining days with Easy runs",35.0,0.0,0.0,0.0
-8,Tue,Easy,"14–15 km Easy",15.0,0.0,0.0,0.0
-8,Thu,Quality (T),"30 min steady @ T (controlled, not forced)",14.0,0.0,8.1,0.0
-8,Sat,Long,"34 km Long Run – last 12 km @ M",34.0,12.0,0.0,0.0
-8,Other,Easy,"Fill remaining days with Easy runs",36.0,0.0,0.0,0.0
-9,Tue,Easy,"12–14 km Easy + strides",14.0,0.0,0.0,1.0
-9,Thu,Quality (T),"20–25 min @ T inside aerobic run",14.0,0.0,6.0,0.0
-9,Sat,Long,"32 km Long Run – M/T Combo Intro (10E, 6T, 2E, 10M, E)",32.0,10.0,6.0,0.0
-9,Other,Easy,"Fill remaining days with Easy runs",35.0,0.0,0.0,0.0
-10,Tue,Easy,"14 km Easy",14.0,0.0,0.0,0.0
-10,Thu,Quality (T),"2×20 min @ T (controlled)",16.0,0.0,10.8,0.0
-10,Sat,Long,"30–32 km Long Run – Alternating Combo (3× (3 km @ M + 2 km @ T))",32.0,9.0,6.0,0.0
-10,Other,Easy,"Fill remaining days with Easy runs",33.0,0.0,0.0,0.0
-11,Tue,Easy,"14 km Easy + strides",14.0,0.0,0.0,1.0
-11,Thu,Quality (T),"25 min @ T (light, confidence-building)",14.0,0.0,6.8,0.0
-11,Sat,Long,"34 km Long Run – last 14 km @ M",34.0,14.0,0.0,0.0
-11,Other,Easy,"Fill remaining days with Easy runs",33.0,0.0,0.0,0.0
-12,Tue,Easy,"12–14 km Easy",14.0,0.0,0.0,0.0
-12,Thu,Quality (T),"20–25 min @ T inside aerobic run",14.0,0.0,6.0,0.0
-12,Sat,Long,"30–32 km Long Run – Embedded Threshold (12E, 5T, 3E, 5T)",32.0,0.0,10.0,0.0
-12,Other,Easy,"Fill remaining days with Easy runs",32.0,0.0,0.0,0.0
-13,Tue,Easy,"12 km Easy + strides",12.0,0.0,0.0,1.0
-13,Thu,Quality (T),"20 min @ T (optional, skip if fatigued)",12.0,0.0,5.4,0.0
-13,Sat,Long,"28–30 km Long Run – M/T Sandwich (8M, 6T, 8M)",30.0,16.0,6.0,0.0
-13,Other,Easy,"Fill remaining days with Easy runs",32.0,0.0,0.0,0.0
-14,Tue,Quality (M),"12 km @ M",16.0,12.0,0.0,0.0
-14,Thu,Quality (T),"3×2 km @ T",12.0,0.0,6.0,0.0
-14,Sat,Easy Long,"20–22 km Long (easy)",22.0,0.0,0.0,0.0
-14,Other,Easy,"Fill remaining days with Easy runs",20.0,0.0,0.0,0.0
-15,Mon,Easy,"10 km Easy + strides",10.0,0.0,0.0,1.0
-15,Tue,Quality (T),"3×3 min @ T",8.0,0.0,2.4,0.0
-15,Wed,Easy,"8 km Easy",8.0,0.0,0.0,0.0
-15,Thu,Easy,"6 km Easy + 4×200 m strides",7.0,0.0,0.0,0.8
-15,Fri,Rest,"Rest",0.0,0.0,0.0,0.0
-15,Sat,Rest,"Rest",0.0,0.0,0.0,0.0
-15,Sun,RACE,"COPENHAGEN MARATHON – May 10th",42.2,42.2,0.0,0.0`;
-
-        function parseCSV(csvText) {
-            const lines = csvText.trim().split('\n');
-            const headers = [];
-            // Handle headers with parentheses, keeping them simple
-            // Using a regex to split by comma but ignoring commas in quotes
-            const splitCSV = (str) => {
-                const matches = str.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-                // This simple regex might fail on simpler cases or empty fields.
-                // Let's use a more robust manual parser for safety
-                const result = [];
-                let current = '';
-                let inQuote = false;
-                for (let i = 0; i < str.length; i++) {
-                    const c = str[i];
-                    if (c === '"') { inQuote = !inQuote; continue; }
-                    if (c === ',' && !inQuote) {
-                        result.push(current);
-                        current = '';
-                    } else {
-                        current += c;
-                    }
-                }
-                result.push(current);
-                return result;
-            };
-
-            const headerLine = splitCSV(lines[0]);
-            // Map headers
-            const keys = headerLine.map(h => h.trim());
-
-            const data = [];
-            for (let i = 1; i < lines.length; i++) {
-                if (!lines[i].trim()) continue;
-                const values = splitCSV(lines[i]);
-                const row = {};
-                keys.forEach((key, index) => {
-                    row[key] = values[index] ? values[index].trim() : '';
-                });
-                data.push(row);
-            }
-            return data;
-        }
-
-        function processCopenhagenData() {
-            const rawData = parseCSV(copenhagenCSV);
-            const weeksMap = new Map();
-
-            // Constants map
-            const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-            rawData.forEach(row => {
-                const w = parseInt(row['Week']);
-                if (!weeksMap.has(w)) {
-                    weeksMap.set(w, {
-                        n: w,
-                        days: [],
-                        rawRows: []
-                    });
-                }
-                weeksMap.get(w).rawRows.push(row);
-            });
-
-            const weeks = [];
-            weeksMap.forEach(weekObj => {
-                // Process days
-                const definedDays = weekObj.rawRows.filter(r => r['Day'] !== 'Other');
-                const otherEntry = weekObj.rawRows.find(r => r['Day'] === 'Other');
-
-                // Generate full 7 day schedule
-                const finalDays = [];
-                const specificDaysMap = new Map();
-                definedDays.forEach(r => specificDaysMap.set(r['Day'], r));
-
-                const usedDayNames = Array.from(specificDaysMap.keys());
-                const emptyDayNames = weekDays.filter(d => !usedDayNames.includes(d));
-
-                let fillerDist = 0;
-                if (otherEntry) {
-                    fillerDist = parseFloat(otherEntry['Total Distance (km)']) / emptyDayNames.length;
-                }
-
-                let weekStats = {
-                    total: 0,
-                    lt: 0,
-                    at: 0,
-                    aboveAt: 0
-                };
-
-                weekDays.forEach(dayName => {
-                    if (specificDaysMap.has(dayName)) {
-                        const r = specificDaysMap.get(dayName);
-                        // Map type to internal class
-                        let typeClass = 'easy';
-                        let paceType = 'easy';
-                        const typeLower = r['Session Type'].toLowerCase();
-                        if (typeLower.includes('quality (t)')) { typeClass = 'tempo'; paceType = 'threshold'; }
-                        else if (typeLower.includes('quality (i)')) { typeClass = 'interval'; paceType = 'interval'; }
-                        else if (typeLower.includes('long')) { typeClass = 'long'; paceType = 'easy'; if (r['Description'].includes('@ m')) paceType = 'marathon'; }
-                        else if (typeLower.includes('quality (m)')) { typeClass = 'tempo'; paceType = 'marathon'; }
-                        else if (typeLower.includes('race')) { typeClass = 'interval'; paceType = 'race'; }
-                        else if (typeLower.includes('rest')) { typeClass = 'rest'; }
-
-                        finalDays.push({
-                            day: dayName,
-                            type: r['Session Type'],
-                            desc: r['Description'].replace(/"/g, ''), // clean quotes
-                            dist: parseFloat(r['Total Distance (km)']),
-                            pace: paceType,
-                            class: typeClass,
-                            stats: {
-                                total: parseFloat(r['Total Distance (km)']),
-                                lt: parseFloat(r['LT Distance (km)']),
-                                at: parseFloat(r['AT Distance (km)']),
-                                aboveAt: parseFloat(r['Above AT Distance (km)'])
-                            }
-                        });
-                    } else {
-                        if (otherEntry) {
-                            finalDays.push({
-                                day: dayName,
-                                type: 'Easy',
-                                desc: `${fillerDist.toFixed(1)} km Easy (Filler)`,
-                                dist: fillerDist,
-                                pace: 'easy',
-                                class: 'easy',
-                                stats: { total: fillerDist, lt: 0, at: 0, aboveAt: 0 }
-                            });
-                        } else {
-                            finalDays.push({ type: 'Rest', day: dayName, desc: 'Rest Day', class: 'rest', stats: { total: 0, lt: 0, at: 0, aboveAt: 0 } });
-                        }
-                    }
-                });
-
-                // Aggregate Stats
-                finalDays.forEach(d => {
-                    if (d.stats) {
-                        weekStats.total += d.stats.total;
-                        weekStats.lt += d.stats.lt;
-                        weekStats.at += d.stats.at;
-                        weekStats.aboveAt += d.stats.aboveAt;
-                    }
-                });
-
-                weeks.push({
-                    n: weekObj.n,
-                    days: finalDays,
-                    stats: weekStats
-                });
-            });
-
-            return weeks;
-        }
-
-        // Chart.js instance
-        let myChart = null;
-
-        function renderChart(weeks, unit) {
-            const ctx = document.getElementById('planChart').getContext('2d');
-
-            // Data prep
-            const labels = weeks.map(w => `Week ${w.n}`);
-            // Conversion factor
-            const factor = unit === 'mi' ? 0.621371 : 1;
-
-            const dataTotal = weeks.map(w => (w.stats.total * factor).toFixed(1));
-            const dataLT = weeks.map(w => (w.stats.lt * factor).toFixed(1));
-            const dataAT = weeks.map(w => (w.stats.at * factor).toFixed(1));
-            const dataVo2 = weeks.map(w => (w.stats.aboveAt * factor).toFixed(1));
-
-            if (myChart) {
-                myChart.destroy();
-            }
-
-            Chart.defaults.color = '#333333';
-            Chart.defaults.font.family = 'Outfit';
-
-            myChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Total Distance',
-                            data: dataTotal,
-                            borderColor: '#333333',
-                            backgroundColor: '#333333',
-                            borderWidth: 2,
-                            tension: 0.3,
-                            pointBackgroundColor: '#FFFFFF'
-                        },
-                        {
-                            label: 'LT Distance',
-                            data: dataLT,
-                            borderColor: '#FFD60A', // Yellow
-                            backgroundColor: '#FFD60A',
-                            borderWidth: 2,
-                            tension: 0.3,
-                            pointBackgroundColor: '#FFFFFF'
-                        },
-                        {
-                            label: 'AT Distance',
-                            data: dataAT,
-                            borderColor: '#FF9500', // Orange
-                            backgroundColor: '#FF9500',
-                            borderWidth: 2,
-                            tension: 0.3,
-                            pointBackgroundColor: '#FFFFFF'
-                        },
-                        {
-                            label: 'Vo2 Distance',
-                            data: dataVo2,
-                            borderColor: '#FF3B30', // Red
-                            backgroundColor: '#FF3B30',
-                            borderWidth: 2,
-                            tension: 0.3,
-                            pointBackgroundColor: '#FFFFFF'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                            labels: {
-                                color: '#333333'
-                            }
-                        },
-                        tooltip: {
-                            padding: 10,
-                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                            titleColor: '#333',
-                            bodyColor: '#333',
-                            titleFont: { size: 13 },
-                            bodyFont: { size: 12 },
-                            borderWidth: 1,
-                            borderColor: 'rgba(0,0,0,0.1)'
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: { color: 'rgba(0,0,0,0.05)' },
-                            ticks: { color: '#666' }
-                        },
-                        y: {
-                            grid: { color: 'rgba(0,0,0,0.05)' },
-                            title: { display: true, text: `Distance (${unit})`, color: '#666' },
-                            ticks: { color: '#666' }
-                        }
-                    }
-                }
-            });
-        }
-
-        const plans = {
-            "copenhagen_marathon": {
-                name: "Copenhagen Marathon (15 Weeks)",
-                duration: 15,
-                weeks: processCopenhagenData() // Process immediately
-            },
-            "5k_improver": {
-                name: "5k Improver",
-                duration: 8,
-                weeks: [
-                    {
-                        n: 1,
-                        days: [
-                            { type: 'Rest', desc: 'Rest Day', class: 'rest' },
-                            { type: 'Easy', desc: '5km @ Easy Pace', dist: 5, pace: 'easy', class: 'easy' },
-                            { type: 'Intervals', desc: '4x400m @ Interval Pace', dist: 0.4, reps: 4, pace: 'interval', class: 'interval' },
-                            { type: 'Easy', desc: '5km @ Easy Pace', dist: 5, pace: 'easy', class: 'easy' },
-                            { type: 'Rest', desc: 'Rest or Cross Train', class: 'rest' },
-                            { type: 'Long', desc: '8km @ Long Run Pace', dist: 8, pace: 'long', class: 'long' },
-                            { type: 'Rest', desc: 'Rest Day', class: 'rest' }
-                        ]
-                    }
-                ]
-            },
-            "10k_beginner": {
-                name: "10k Beginner",
-                duration: 10,
-                weeks: [
-                    {
-                        n: 1,
-                        days: [
-                            { type: 'Rest', desc: 'Rest Day', class: 'rest' },
-                            { type: 'Easy', desc: '4km @ Easy Pace', dist: 4, pace: 'easy', class: 'easy' },
-                            { type: 'Rest', desc: 'Rest Day', class: 'rest' },
-                            { type: 'Easy', desc: '4km @ Easy Pace', dist: 4, pace: 'easy', class: 'easy' },
-                            { type: 'Rest', desc: 'Rest Day', class: 'rest' },
-                            { type: 'Long', desc: '6km @ Long Run Pace', dist: 6, pace: 'long', class: 'long' },
-                            { type: 'Rest', desc: 'Rest Day', class: 'rest' }
-                        ]
-                    }
-                ]
-            }
-        };
-
-        // --- App Controller ---
-        let usersData = null;
-
-        const ui = {
-            async init() {
-                // Load user data from JSON
-                try {
-                    const response = await fetch('users.json');
-                    usersData = await response.json();
-                } catch (e) {
-                    console.error('Failed to load users.json:', e);
-                    usersData = { users: {} };
-                }
-
-                // User selector listener
-                document.getElementById('userSelect').addEventListener('change', () => {
-                    this.loadUser();
-                });
-
-                // Mode switcher
-                document.getElementById('tuningMode').addEventListener('change', () => {
-                    this.updateTuningSection();
-                    this.update();
-                });
-
-                // Plan selector (updates goal race label)
-                document.getElementById('planSelect').addEventListener('change', () => {
-                    this.updateGoalRaceLabel();
-                    this.update();
-                });
-
-                // All input listeners
-                const inputs = [
-                    'raceDistance', 'raceTime', 'units', 'raceDate',
-                    'pb5k', 'pb10k', 'pbHalf', 'pbMarathon',
-                    'goalTime'
-                ];
-                inputs.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) {
-                        ['input', 'change'].forEach(evt => {
-                            el.addEventListener(evt, () => this.update());
-                        });
-                    }
-                });
-
-                // Load initial user
-                this.loadUser();
-            },
-
-            loadUser() {
-                const userId = document.getElementById('userSelect').value;
-                const user = usersData?.users?.[userId];
-                if (!user) return;
-
-                // Set tuning mode
-                document.getElementById('tuningMode').value = user.tuningMode;
-                this.updateTuningSection();
-
-                // Set single PB fields
-                if (user.singlePb) {
-                    document.getElementById('raceDistance').value = user.singlePb.distance || '5k';
-                    document.getElementById('raceTime').value = user.singlePb.time || '';
-                }
-
-                // Set all PBs fields
-                if (user.allPbs) {
-                    document.getElementById('pb5k').value = user.allPbs['5k'] || '';
-                    document.getElementById('pb10k').value = user.allPbs['10k'] || '';
-                    document.getElementById('pbHalf').value = user.allPbs.half || '';
-                    document.getElementById('pbMarathon').value = user.allPbs.marathon || '';
-                }
-
-                // Set goal time
-                document.getElementById('goalTime').value = user.goalTime || '';
-
-                this.updateGoalRaceLabel();
-                this.update();
-            },
-
-            updateTuningSection() {
-                const mode = document.getElementById('tuningMode').value;
-                document.getElementById('singlePbSection').classList.toggle('active', mode === 'single');
-                document.getElementById('allPbsSection').classList.toggle('active', mode === 'allPbs');
-                document.getElementById('goalTimeSection').classList.toggle('active', mode === 'goalTime');
-            },
-
-            updateGoalRaceLabel() {
-                const planSelect = document.getElementById('planSelect');
-                const selectedOption = planSelect.options[planSelect.selectedIndex];
-                const distance = selectedOption.getAttribute('data-distance') || 'marathon';
-                document.getElementById('goalRaceLabel').textContent = getDistanceLabel(distance);
-            },
-
-            getVDOT() {
-                const mode = document.getElementById('tuningMode').value;
-
-                if (mode === 'single') {
-                    const raceDist = document.getElementById('raceDistance').value;
-                    const timeSec = parseTimeInput(document.getElementById('raceTime').value);
-                    if (!timeSec) return null;
-                    const distMeters = getDistanceMeters(raceDist);
-                    return calculateVDOT(distMeters, timeSec / 60);
-                }
-
-                if (mode === 'allPbs') {
-                    const pbTimes = {
-                        '5k': parseTimeInput(document.getElementById('pb5k').value),
-                        '10k': parseTimeInput(document.getElementById('pb10k').value),
-                        'half': parseTimeInput(document.getElementById('pbHalf').value),
-                        'marathon': parseTimeInput(document.getElementById('pbMarathon').value)
-                    };
-                    return calculateAverageVDOT(pbTimes);
-                }
-
-                if (mode === 'goalTime') {
-                    const planSelect = document.getElementById('planSelect');
-                    const selectedOption = planSelect.options[planSelect.selectedIndex];
-                    const distance = selectedOption.getAttribute('data-distance') || 'marathon';
-                    const goalTimeSec = parseTimeInput(document.getElementById('goalTime').value);
-                    if (!goalTimeSec) return null;
-                    const distMeters = getDistanceMeters(distance);
-                    return calculateVDOT(distMeters, goalTimeSec / 60);
-                }
-
-                return null;
-            },
-
-            update() {
-                const vdot = this.getVDOT();
-                const planSelect = document.getElementById('planSelect');
-                const planKey = planSelect ? planSelect.value : 'copenhagen_marathon';
-                const unit = document.getElementById('units').value;
-
-                // Display VDOT
-                const vdotDisplay = document.getElementById('vdotDisplay');
-                const vdotValue = document.getElementById('vdotValue');
-                if (vdot) {
-                    vdotDisplay.style.display = 'inline-flex';
-                    vdotValue.textContent = vdot.toFixed(1);
-                } else {
-                    vdotDisplay.style.display = 'none';
-                    vdotValue.textContent = '--';
-                }
-
-                if (!vdot) {
-                    document.getElementById('paceSummary').innerHTML = '<div class="pace-chip"><span class="label">Enter valid times to see paces</span></div>';
-                    return;
-                }
-
-                // Calculate paces from VDOT
-                const pacesKm = calculatePacesFromVDOT(vdot);
-
-                // Convert to display unit
-                const conversion = unit === 'mi' ? 1.60934 : 1;
-                const pacesDisplay = {};
-                for (let k in pacesKm) {
-                    pacesDisplay[k] = pacesKm[k] * conversion;
-                }
-
-                // Render Pace Summary
-                const paceTypes = [
-                    { key: 'easy', label: 'Easy (E)' },
-                    { key: 'marathon', label: 'Marathon (M)' },
-                    { key: 'threshold', label: 'Threshold (T)' },
-                    { key: 'interval', label: 'Interval (I)' },
-                    { key: 'repetition', label: 'Repetition (R)' }
-                ];
-
-                const html = paceTypes.map(p => `
-                <div class="pace-chip">
-                    <span class="label">${p.label}</span>
-                    <span class="value">${formatTime(pacesDisplay[p.key])}/${unit}</span>
-                </div>
-            `).join('');
-                document.getElementById('paceSummary').innerHTML = html;
-
-                // Render Plan
-                const plan = plans[planKey];
-                if (!plan) return;
-
-                // Calculate dates (counting back from race date)
-                const raceDate = new Date(document.getElementById('raceDate').value);
-                const totalWeeks = plan.weeks.length;
-
-                // Render Chart if compatible data exists
-                if (plan.weeks && plan.weeks[0].stats) {
-                    document.getElementById('planChart').style.display = 'block';
-                    renderChart(plan.weeks, unit);
-                } else {
-                    document.getElementById('planChart').style.display = 'none';
-                }
-
-                // Get saved session order from localStorage
-                const userId = document.getElementById('userSelect').value;
-                const savedOrder = JSON.parse(localStorage.getItem(`velocity_order_${userId}_${planKey}`) || '{}');
-
-                let planHtml = '';
-                plan.weeks.forEach((week, weekIndex) => {
-                    // Calculate week start date (race date - remaining weeks * 7)
-                    const weeksUntilRace = totalWeeks - week.n;
-                    const weekStartDate = new Date(raceDate);
-                    weekStartDate.setDate(raceDate.getDate() - (weeksUntilRace * 7) - 6);
-
-                    // Get days in custom order if saved
-                    let days = [...week.days];
-                    if (savedOrder[week.n]) {
-                        days = savedOrder[week.n].map(idx => week.days[idx]);
-                    }
-
-                    let statsHtml = '';
-                    if (week.stats) {
-                        const formatStat = (val) => (val * conversion).toFixed(1);
-                        statsHtml = `
-                        <div style="display:flex; gap:10px; font-size:0.8rem; margin-top:5px; opacity:0.8;">
-                            <span style="color:var(--text-main)">Total: ${formatStat(week.stats.total)}${unit}</span>
-                            ${week.stats.lt > 0 ? `<span style="color:#FFD60A">LT: ${formatStat(week.stats.lt)}</span>` : ''}
-                            ${week.stats.at > 0 ? `<span style="color:#FF9F0A">AT: ${formatStat(week.stats.at)}</span>` : ''}
-                            ${week.stats.aboveAt > 0 ? `<span style="color:#FF3B30">Vo2: ${formatStat(week.stats.aboveAt)}</span>` : ''}
-                        </div>
-                    `;
-                    }
-
-                    // Format week date range
-                    const weekEndDate = new Date(weekStartDate);
-                    weekEndDate.setDate(weekStartDate.getDate() + 6);
-                    const formatDate = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-                    const weekDates = `${formatDate(weekStartDate)} – ${formatDate(weekEndDate)}`;
-
-                    let daysHtml = '';
-                    days.forEach((day, dayIndex) => {
-                        // Calculate actual date for this day
-                        const dayDate = new Date(weekStartDate);
-                        dayDate.setDate(weekStartDate.getDate() + dayIndex);
-                        const dayDateStr = dayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-
-                        let desc = day.desc;
-                        if (day.pace && pacesDisplay[day.pace]) {
-                            const p = formatTime(pacesDisplay[day.pace]);
-                            desc += ` <span style="opacity:0.6; font-size:0.8em;">(${p}/${unit})</span>`;
-                        }
-
-                        daysHtml += `
-                        <div class="day-cell" draggable="true" data-week="${week.n}" data-day="${dayIndex}">
-                            <div class="day-date">${dayDateStr}</div>
-                            <div class="day-name">${day.day || 'Day'}</div>
-                            <div class="workout-type type-${day.class}">${day.type}</div>
-                            <div class="workout-detail">${desc}</div>
-                        </div>
-                    `;
-                    });
-
-                    planHtml += `
-                    <div class="week-card" data-week="${week.n}">
-                        <div class="week-header">
-                            <div>Week ${week.n}</div>
-                            <div class="week-dates">${weekDates}</div>
-                            ${statsHtml}
-                        </div>
-                        <div class="days-grid">
-                            ${daysHtml}
-                        </div>
-                    </div>
-                `;
-                });
-
-                document.getElementById('planContainer').innerHTML = planHtml;
-
-                // Setup drag and drop
-                this.setupDragDrop(planKey);
-            },
-
-            setupDragDrop(planKey) {
-                const dayCells = document.querySelectorAll('.day-cell[draggable="true"]');
-                let draggedEl = null;
-
-                dayCells.forEach(cell => {
-                    cell.addEventListener('dragstart', (e) => {
-                        draggedEl = cell;
-                        cell.classList.add('dragging');
-                        e.dataTransfer.effectAllowed = 'move';
-                    });
-
-                    cell.addEventListener('dragend', () => {
-                        cell.classList.remove('dragging');
-                        document.querySelectorAll('.day-cell.drag-over').forEach(el => el.classList.remove('drag-over'));
-                    });
-
-                    cell.addEventListener('dragover', (e) => {
-                        e.preventDefault();
-                        if (draggedEl && draggedEl !== cell && draggedEl.dataset.week === cell.dataset.week) {
-                            cell.classList.add('drag-over');
-                        }
-                    });
-
-                    cell.addEventListener('dragleave', () => {
-                        cell.classList.remove('drag-over');
-                    });
-
-                    cell.addEventListener('drop', (e) => {
-                        e.preventDefault();
-                        cell.classList.remove('drag-over');
-                        if (draggedEl && draggedEl !== cell && draggedEl.dataset.week === cell.dataset.week) {
-                            const weekNum = parseInt(cell.dataset.week);
-                            const grid = cell.closest('.days-grid');
-                            const cells = Array.from(grid.querySelectorAll('.day-cell'));
-                            const fromIdx = cells.indexOf(draggedEl);
-                            const toIdx = cells.indexOf(cell);
-
-                            // Reorder in DOM
-                            if (fromIdx < toIdx) {
-                                cell.after(draggedEl);
-                            } else {
-                                cell.before(draggedEl);
-                            }
-
-                            // Save new order to localStorage
-                            this.saveOrder(weekNum, planKey);
-                        }
-                    });
-                });
-            },
-
-            saveOrder(weekNum, planKey) {
-                const userId = document.getElementById('userSelect').value;
-                const key = `velocity_order_${userId}_${planKey}`;
-                const savedOrder = JSON.parse(localStorage.getItem(key) || '{}');
-
-                const grid = document.querySelector(`.week-card[data-week="${weekNum}"] .days-grid`);
-                const cells = Array.from(grid.querySelectorAll('.day-cell'));
-                savedOrder[weekNum] = cells.map(c => parseInt(c.dataset.day));
-
-                localStorage.setItem(key, JSON.stringify(savedOrder));
-            }
-        };
-
-        ui.init();
-
-    </script>
+    <script type="module" src="src/app.js"></script>
 </body>
 
 </html>
