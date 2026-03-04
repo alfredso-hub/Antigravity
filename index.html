@@ -201,9 +201,15 @@
                         </div>
 
                         <div class="create-plan-actions">
-                            <button type="button" id="addWeekBtn" class="btn btn-secondary">
-                                + Add Week
-                            </button>
+                            <div class="add-week-row">
+                                <button type="button" id="addWeekBtn" class="btn btn-secondary">
+                                    + Add Week
+                                </button>
+                                <select id="copyFromWeekSelect" class="copy-from-select">
+                                    <option value="">Blank</option>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
                             <button type="submit" class="btn btn-primary">
                                 Create Plan
                             </button>

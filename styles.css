@@ -826,7 +826,23 @@ select:focus {
     display: flex;
     gap: 12px;
     margin-top: 20px;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.add-week-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.copy-from-select {
+    padding: 8px 12px !important;
+    font-size: 0.82rem !important;
+    border-radius: var(--radius-sm) !important;
+    background: var(--surface-secondary) !important;
+    color: var(--text-main) !important;
+    min-width: 140px;
 }
 
 /* ═══ Animations ═══ */

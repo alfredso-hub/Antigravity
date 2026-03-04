@@ -129,10 +129,16 @@ async function loadAndRenderPlan() {
     const planId = document.getElementById('planSelect').value;
     if (!planId) return;
 
-    currentPlanWeeks = await loadPlanWeeks(planId);
-    if (currentUser) {
-        currentCustomizations = await loadUserCustomizations(currentUser.id, planId);
-    } else {
+    try {
+        currentPlanWeeks = await loadPlanWeeks(planId);
+        if (currentUser) {
+            currentCustomizations = await loadUserCustomizations(currentUser.id, planId);
+        } else {
+            currentCustomizations = {};
+        }
+    } catch (err) {
+        console.error('Error loading plan:', err);
+        currentPlanWeeks = [];
         currentCustomizations = {};
     }
     renderPlan();
@@ -504,15 +510,14 @@ function setupCreatePlan() {
             container.innerHTML = '';
 
             if (!planId) {
-                // Start from scratch — add one empty week
                 container.appendChild(createWeekInput(1));
             } else {
-                // Clone from existing plan
                 const weeks = await loadPlanWeeks(planId);
                 weeks.forEach((week, idx) => {
                     container.appendChild(createWeekInput(idx + 1, week.days));
                 });
             }
+            updateCopyFromDropdown();
         });
     }
 
@@ -520,7 +525,29 @@ function setupCreatePlan() {
         addWeekBtn.addEventListener('click', () => {
             const container = document.getElementById('weekInputsContainer');
             const weekCount = container.querySelectorAll('.week-input-card').length + 1;
-            container.appendChild(createWeekInput(weekCount));
+            const copyFromSelect = document.getElementById('copyFromWeekSelect');
+            const copyFromWeek = copyFromSelect ? copyFromSelect.value : '';
+
+            if (copyFromWeek) {
+                // Clone from an existing week
+                const sourceWeekIdx = parseInt(copyFromWeek) - 1;
+                const sourceCard = container.querySelectorAll('.week-input-card')[sourceWeekIdx];
+                if (sourceCard) {
+                    // Extract day data from source week
+                    const sourceDayEditors = sourceCard.querySelectorAll('.day-editor');
+                    const clonedDays = [];
+                    sourceDayEditors.forEach(editor => {
+                        clonedDays.push(extractDayData(editor));
+                    });
+                    container.appendChild(createWeekInput(weekCount, clonedDays));
+                } else {
+                    container.appendChild(createWeekInput(weekCount));
+                }
+            } else {
+                container.appendChild(createWeekInput(weekCount));
+            }
+
+            updateCopyFromDropdown();
         });
     }
 
@@ -658,6 +685,18 @@ function extractDayData(dayEditor) {
 function extractWorkoutData(card) {
     const workoutType = card.querySelector('.workout-type-select')?.value || 'easy';
     const description = card.querySelector('.workout-desc-input')?.value || '';
+
+    if (workoutType === 'rest') {
+        return {
+            type: 'Rest',
+            desc: description || 'Rest',
+            dist: 0,
+            pace: 'easy',
+            class: 'rest',
+            stats: { total: 0, lt: 0, at: 0, aboveAt: 0 },
+            structured: { workoutType: 'rest', description }
+        };
+    }
 
     if (workoutType === 'easy') {
         const dist = parseFloat(card.querySelector('.easy-distance')?.value) || 0;
@@ -802,9 +841,23 @@ function createWeekInput(weekNumber, existingDays = null) {
     header.querySelector('.remove-week-btn').addEventListener('click', () => {
         card.remove();
         document.querySelectorAll('.week-input-card h3').forEach((h, i) => h.textContent = `Week ${i + 1}`);
+        updateCopyFromDropdown();
     });
 
     return card;
+}
+
+function updateCopyFromDropdown() {
+    const select = document.getElementById('copyFromWeekSelect');
+    if (!select) return;
+    const weekCount = document.querySelectorAll('.week-input-card').length;
+    select.innerHTML = '<option value="">Blank</option>';
+    for (let i = 1; i <= weekCount; i++) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `Copy Week ${i}`;
+        select.appendChild(opt);
+    }
 }
 
 // ─── Day Editor (multi-workout container) ───
@@ -876,9 +929,10 @@ function createWorkoutCard(workoutsContainer, addWorkoutBtn, existingData = null
         initialType = existingData.structured.workoutType || 'easy';
     } else if (existingData) {
         const t = (existingData.type || '').toLowerCase();
-        if (t.includes('hill')) initialType = 'hills';
+        if (t.includes('rest') && !t.includes('recovery')) initialType = 'rest';
+        else if (t.includes('hill')) initialType = 'hills';
         else if (t.includes('long')) initialType = 'long';
-        else if (!t.includes('easy') && !t.includes('rest') && !t.includes('recovery')) initialType = 'session';
+        else if (!t.includes('easy') && !t.includes('recovery')) initialType = 'session';
     }
 
     const existingDesc = existingData?.structured?.description || existingData?.desc || '';
@@ -892,6 +946,7 @@ function createWorkoutCard(workoutsContainer, addWorkoutBtn, existingData = null
     topRow.className = 'workout-top-row';
     topRow.innerHTML = `
         <select class="workout-type-select">
+            <option value="rest" ${initialType === 'rest' ? 'selected' : ''}>Rest</option>
             <option value="easy" ${initialType === 'easy' ? 'selected' : ''}>Easy / Recovery</option>
             <option value="session" ${initialType === 'session' ? 'selected' : ''}>Session</option>
             <option value="long" ${initialType === 'long' ? 'selected' : ''}>Long Run</option>
@@ -997,6 +1052,12 @@ function escapeHtml(str) {
 
 function renderWorkoutFields(container, workoutType, existingData) {
     container.innerHTML = '';
+
+    if (workoutType === 'rest') {
+        // Rest day — no fields needed, only the description input in the top row
+        container.innerHTML = `<div class="easy-fields"><span style="color:var(--text-tertiary);font-size:0.85rem;">Rest day — 0 km</span></div>`;
+        return;
+    }
 
     if (workoutType === 'easy') {
         const dist = existingData?.dist || existingData?.structured?.distance || '';
