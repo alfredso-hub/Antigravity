@@ -661,6 +661,13 @@ select:focus {
     width: 65px;
 }
 
+.interval-rest-type {
+    padding: 8px 8px !important;
+    font-size: 0.82rem !important;
+    border-radius: var(--radius-sm) !important;
+    min-width: 80px;
+}
+
 /* Easy fields */
 .easy-fields {
     display: flex;

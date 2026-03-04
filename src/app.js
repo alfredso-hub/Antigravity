@@ -683,8 +683,9 @@ function extractWorkoutData(card) {
         const zone = setEl.querySelector('.interval-zone-select')?.value || 'easy';
         const offset = parseInt(setEl.querySelector('.interval-offset-input')?.value) || 0;
         const rest = parseStructuredValue(setEl.querySelector('.interval-rest-section'));
+        const restType = setEl.querySelector('.interval-rest-type')?.value || 'jog';
         const repeats = parseInt(setEl.querySelector('.interval-repeats-input')?.value) || 1;
-        sets.push({ duration, zone, offset, rest, repeats });
+        sets.push({ duration, zone, offset, rest, restType, repeats });
     });
 
     // Build auto description if user didn't provide one
@@ -705,7 +706,8 @@ function extractWorkoutData(card) {
         const repsStr = set.repeats > 1 ? `${set.repeats}×` : '';
         autoDesc += `${repsStr}${formatStructured(set.duration)} ${paceStr}`;
         if (set.rest.value) {
-            autoDesc += ` (${formatStructured(set.rest)} rest)`;
+            const restTypeLabel = set.restType === 'standing' ? 'standing' : set.restType === 'float' ? 'float' : 'jog';
+            autoDesc += ` (${formatStructured(set.rest)} ${restTypeLabel})`;
         }
         if (i < sets.length - 1) autoDesc += ', ';
 
@@ -724,8 +726,8 @@ function extractWorkoutData(card) {
 
     const finalDesc = description || autoDesc;
     const dominantZone = sets.length > 0 ? sets[0].zone : 'easy';
-    const typeLabel = workoutType === 'long' ? 'Long' : 'Session';
-    const typeClass = workoutType === 'long' ? 'long' : getClassFromPaceZone(dominantZone);
+    const typeLabel = workoutType === 'long' ? 'Long' : workoutType === 'hills' ? 'Hills' : 'Session';
+    const typeClass = workoutType === 'long' ? 'long' : workoutType === 'hills' ? 'interval' : getClassFromPaceZone(dominantZone);
 
     return {
         type: typeLabel,
@@ -739,7 +741,7 @@ function extractWorkoutData(card) {
             at: qualityDist.at || 0,
             aboveAt: qualityDist.aboveAt || 0
         },
-        structured: { workoutType, description, warmUp, coolDown, sets }
+        structured: { workoutType, description, warmUp, coolDown, sets }  // sets include restType
     };
 }
 
@@ -874,7 +876,8 @@ function createWorkoutCard(workoutsContainer, addWorkoutBtn, existingData = null
         initialType = existingData.structured.workoutType || 'easy';
     } else if (existingData) {
         const t = (existingData.type || '').toLowerCase();
-        if (t.includes('long')) initialType = 'long';
+        if (t.includes('hill')) initialType = 'hills';
+        else if (t.includes('long')) initialType = 'long';
         else if (!t.includes('easy') && !t.includes('rest') && !t.includes('recovery')) initialType = 'session';
     }
 
@@ -892,6 +895,7 @@ function createWorkoutCard(workoutsContainer, addWorkoutBtn, existingData = null
             <option value="easy" ${initialType === 'easy' ? 'selected' : ''}>Easy / Recovery</option>
             <option value="session" ${initialType === 'session' ? 'selected' : ''}>Session</option>
             <option value="long" ${initialType === 'long' ? 'selected' : ''}>Long Run</option>
+            <option value="hills" ${initialType === 'hills' ? 'selected' : ''}>Hills</option>
         </select>
         <input type="text" class="workout-desc-input" placeholder="Description (optional)" value="${escapeHtml(existingDesc)}">
     `;
@@ -942,6 +946,7 @@ function createWorkoutCard(workoutsContainer, addWorkoutBtn, existingData = null
     typeSelect.addEventListener('change', () => {
         renderWorkoutFields(fieldsContainer, typeSelect.value, null);
     });
+    // Note: 'hills' uses same structured fields as session/long
 
     // Wire done button
     doneBtn.addEventListener('click', () => {
@@ -1004,11 +1009,11 @@ function renderWorkoutFields(container, workoutType, existingData) {
             </div>
         `;
     } else {
-        // Session or Long Run
+        // Session, Long Run, or Hills — all use structured input
         const structured = existingData?.structured;
         const warmUp = structured?.warmUp || { value: '', unit: 'km' };
         const coolDown = structured?.coolDown || { value: '', unit: 'km' };
-        const sets = structured?.sets || [{ duration: { value: '', unit: 'km' }, zone: 'threshold', offset: 0, rest: { value: '', unit: 'min' }, repeats: 1 }];
+        const sets = structured?.sets || [{ duration: { value: '', unit: 'km' }, zone: 'threshold', offset: 0, rest: { value: '', unit: 'min' }, restType: 'jog', repeats: 1 }];
 
         // Warm-up
         container.appendChild(createStructuredInput('Warm Up', warmUp, 'warmup-section'));
@@ -1059,9 +1064,10 @@ function createIntervalSet(index, data = null) {
     set.className = 'interval-set';
 
     const dur = data?.duration || { value: '', unit: 'km' };
-    const zone = data?.zone || data?.pace || 'threshold';  // backwards compat: old data had 'pace' as raw string
+    const zone = data?.zone || data?.pace || 'threshold';
     const offset = data?.offset || 0;
     const rest = data?.rest || { value: '', unit: 'min' };
+    const restType = data?.restType || 'jog';
     const repeats = data?.repeats || 1;
 
     set.innerHTML = `
@@ -1100,6 +1106,11 @@ function createIntervalSet(index, data = null) {
                         <option value="sec" ${rest.unit === 'sec' ? 'selected' : ''}>sec</option>
                         <option value="m" ${rest.unit === 'm' ? 'selected' : ''}>m</option>
                         <option value="km" ${rest.unit === 'km' ? 'selected' : ''}>km</option>
+                    </select>
+                    <select class="interval-rest-type" title="Rest type">
+                        <option value="jog" ${restType === 'jog' ? 'selected' : ''}>Jog</option>
+                        <option value="standing" ${restType === 'standing' ? 'selected' : ''}>Standing</option>
+                        <option value="float" ${restType === 'float' ? 'selected' : ''}>Float</option>
                     </select>
                 </div>
             </div>
