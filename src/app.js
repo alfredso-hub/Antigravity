@@ -740,7 +740,7 @@ function extractWorkoutData(card) {
 
     sets.forEach((set, i) => {
         const setDist = getDistanceFromStructured(set.duration);
-        const restDist = getDistanceFromStructured(set.rest);
+        const restDist = getRestDistance(set.rest, set.restType);
         const paceStr = formatPaceWithOffset(set.zone, set.offset);
         const repsStr = set.repeats > 1 ? `${set.repeats}×` : '';
         autoDesc += `${repsStr}${formatStructured(set.duration)} ${paceStr}`;
@@ -798,6 +798,27 @@ function getDistanceFromStructured(sv) {
     if (sv.unit === 'min') return sv.value * 0.2;
     if (sv.unit === 'sec') return (sv.value / 60) * 0.2;
     return sv.value;
+}
+
+// Rest distance depends on rest type:
+// - Standing: 0 km (no movement)
+// - Jog: Easy pace + 1 min/km ≈ 6.5 min/km → ~0.154 km/min
+// - Float: T pace + 45s ≈ 5.0 min/km → ~0.200 km/min
+function getRestDistance(sv, restType) {
+    if (!sv || !sv.value) return 0;
+    if (restType === 'standing') return 0;
+
+    // For distance-based rests, the user runs that distance
+    if (sv.unit === 'km') return sv.value;
+    if (sv.unit === 'm') return sv.value / 1000;
+
+    // For time-based rests, convert using estimated pace
+    const kmPerMin = restType === 'float'
+        ? (1 / 5.0)   // ~5:00/km (T + 45s)
+        : (1 / 6.5);  // ~6:30/km (E + 1 min) — default for jog
+
+    const minutes = sv.unit === 'min' ? sv.value : sv.value / 60;
+    return minutes * kmPerMin;
 }
 
 function formatStructured(sv) {
