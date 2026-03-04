@@ -558,41 +558,64 @@ function setupCreatePlan() {
 
             const submitBtn = createPlanForm.querySelector('button[type="submit"]');
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Creating...';
+            submitBtn.textContent = 'Saving...';
+            submitBtn.style.background = '';
 
-            const weekCards = document.querySelectorAll('.week-input-card');
-            const weeksData = [];
+            try {
+                const weekCards = document.querySelectorAll('.week-input-card');
+                const weeksData = [];
 
-            weekCards.forEach(card => {
-                const days = [];
-                const dayEditors = card.querySelectorAll('.day-editor');
-                dayEditors.forEach(editor => {
-                    days.push(extractDayData(editor));
+                weekCards.forEach(card => {
+                    const days = [];
+                    const dayEditors = card.querySelectorAll('.day-editor');
+                    dayEditors.forEach(editor => {
+                        days.push(extractDayData(editor));
+                    });
+                    weeksData.push({ days });
                 });
-                weeksData.push({ days });
-            });
 
-            const planData = {
-                name: document.getElementById('newPlanName').value,
-                distance: document.getElementById('newPlanDistance').value,
-                durationWeeks: weeksData.length,
-                createdBy: currentUser.id
-            };
+                const planData = {
+                    name: document.getElementById('newPlanName').value,
+                    distance: document.getElementById('newPlanDistance').value,
+                    durationWeeks: weeksData.length,
+                    createdBy: currentUser.id
+                };
 
-            const { error } = await createPlan(planData, weeksData);
+                console.log('Creating plan:', planData, 'weeks:', weeksData.length);
+                const result = await createPlan(planData, weeksData);
+                console.log('Create plan result:', result);
 
-            if (error) {
-                submitBtn.textContent = 'Error! Try again';
-                submitBtn.disabled = false;
-            } else {
-                submitBtn.textContent = '✓ Created!';
-                await populatePlanDropdown();
-                populateBasePlanDropdown();
-                setTimeout(() => {
-                    submitBtn.textContent = 'Create Plan';
+                if (result.error) {
+                    const errMsg = result.error.message || result.error.details || JSON.stringify(result.error);
+                    console.error('Plan creation error:', result.error);
+                    submitBtn.textContent = `Error: ${errMsg}`;
+                    submitBtn.style.background = 'var(--accent-red)';
                     submitBtn.disabled = false;
-                    document.querySelector('[data-tab="planViewTab"]').click();
-                }, 1500);
+                    setTimeout(() => {
+                        submitBtn.textContent = 'Save Plan';
+                        submitBtn.style.background = '';
+                    }, 4000);
+                } else {
+                    submitBtn.textContent = '✓ Saved!';
+                    submitBtn.style.background = 'var(--accent-green)';
+                    await populatePlanDropdown();
+                    populateBasePlanDropdown();
+                    setTimeout(() => {
+                        submitBtn.textContent = 'Save Plan';
+                        submitBtn.style.background = '';
+                        submitBtn.disabled = false;
+                        document.querySelector('[data-tab="planViewTab"]').click();
+                    }, 1500);
+                }
+            } catch (err) {
+                console.error('Plan creation threw:', err);
+                submitBtn.textContent = `Error: ${err.message || 'Unknown error'}`;
+                submitBtn.style.background = 'var(--accent-red)';
+                submitBtn.disabled = false;
+                setTimeout(() => {
+                    submitBtn.textContent = 'Save Plan';
+                    submitBtn.style.background = '';
+                }, 4000);
             }
         });
     }
