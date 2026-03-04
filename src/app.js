@@ -212,8 +212,8 @@ function renderChart(weeks, unit) {
 
     if (myChart) myChart.destroy();
 
-    Chart.defaults.color = '#333333';
-    Chart.defaults.font.family = 'Outfit';
+    Chart.defaults.color = '#98989D';
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
 
     myChart = new Chart(ctx, {
         type: 'line',
@@ -223,26 +223,26 @@ function renderChart(weeks, unit) {
                 {
                     label: 'Total Distance',
                     data: stats.map(s => (s.total * factor).toFixed(1)),
-                    borderColor: '#333333', backgroundColor: '#333333',
-                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#FFFFFF'
+                    borderColor: '#F5F5F7', backgroundColor: '#F5F5F7',
+                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
                 },
                 {
                     label: 'LT Distance',
                     data: stats.map(s => (s.lt * factor).toFixed(1)),
-                    borderColor: '#FFD60A', backgroundColor: '#FFD60A',
-                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#FFFFFF'
+                    borderColor: '#FF9F0A', backgroundColor: '#FF9F0A',
+                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
                 },
                 {
                     label: 'AT Distance',
                     data: stats.map(s => (s.at * factor).toFixed(1)),
-                    borderColor: '#FF9500', backgroundColor: '#FF9500',
-                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#FFFFFF'
+                    borderColor: '#0A84FF', backgroundColor: '#0A84FF',
+                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
                 },
                 {
                     label: 'VO2 Distance',
                     data: stats.map(s => (s.aboveAt * factor).toFixed(1)),
-                    borderColor: '#FF3B30', backgroundColor: '#FF3B30',
-                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#FFFFFF'
+                    borderColor: '#FF453A', backgroundColor: '#FF453A',
+                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
                 }
             ]
         },
@@ -251,20 +251,20 @@ function renderChart(weeks, unit) {
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { position: 'top', labels: { color: '#333333' } },
+                legend: { position: 'top', labels: { color: '#98989D' } },
                 tooltip: {
-                    padding: 10, backgroundColor: 'rgba(255,255,255,0.9)',
-                    titleColor: '#333', bodyColor: '#333',
+                    padding: 10, backgroundColor: 'rgba(44,44,46,0.95)',
+                    titleColor: '#F5F5F7', bodyColor: '#F5F5F7',
                     titleFont: { size: 13 }, bodyFont: { size: 12 },
-                    borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)'
+                    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
                 }
             },
             scales: {
-                x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#666' } },
+                x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#636366' } },
                 y: {
-                    grid: { color: 'rgba(0,0,0,0.05)' },
-                    title: { display: true, text: `Distance (${unit})`, color: '#666' },
-                    ticks: { color: '#666' }
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    title: { display: true, text: `Distance (${unit})`, color: '#636366' },
+                    ticks: { color: '#636366' }
                 }
             }
         }
