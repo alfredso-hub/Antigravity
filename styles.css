@@ -477,13 +477,197 @@ select:focus {
 }
 
 /* Type-specific colors */
-.type-easy { color: var(--accent-green); }
-.type-tempo { color: var(--accent-blue); }
-.type-long { color: #E6B800; }
-.type-interval { color: var(--primary); }
-.type-rest { color: var(--text-secondary); opacity: 0.5; }
+.type-easy {
+    color: var(--accent-green);
+}
 
-/* ═══ Create Plan ═══ */
+.type-tempo {
+    color: var(--accent-blue);
+}
+
+.type-long {
+    color: #E6B800;
+}
+
+.type-interval {
+    color: var(--primary);
+}
+
+.type-rest {
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+/* ═══ Create Plan – Day Editor ═══ */
+.day-editor {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: 8px;
+    transition: var(--transition);
+}
+
+.day-editor:hover {
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+.day-editor-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.02);
+    border-bottom: 1px solid var(--border);
+}
+
+.day-name-label {
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    min-width: 36px;
+}
+
+.workout-type-select {
+    padding: 8px 12px !important;
+    font-size: 0.85rem !important;
+    border-radius: var(--radius-sm) !important;
+    flex: 1;
+    max-width: 200px;
+}
+
+.day-fields-container {
+    padding: 12px 16px;
+}
+
+/* Easy fields */
+.easy-fields {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.easy-fields .field-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.easy-fields .field-row label {
+    font-size: 0.8rem;
+    min-width: auto;
+    text-transform: none;
+}
+
+.easy-fields input {
+    padding: 8px 12px !important;
+    font-size: 0.85rem !important;
+    width: 100px;
+    border-radius: var(--radius-sm) !important;
+}
+
+/* Structured inputs */
+.structured-input-group {
+    margin-bottom: 10px;
+}
+
+.structured-input-group label {
+    font-size: 0.75rem;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.struct-row {
+    display: flex;
+    gap: 6px;
+}
+
+.struct-row .struct-value {
+    padding: 8px 10px !important;
+    font-size: 0.85rem !important;
+    border-radius: var(--radius-sm) !important;
+    width: 80px;
+}
+
+.struct-row .struct-unit {
+    padding: 8px 8px !important;
+    font-size: 0.82rem !important;
+    border-radius: var(--radius-sm) !important;
+    width: 70px;
+}
+
+/* Interval sets */
+.interval-sets-container {
+    margin: 8px 0;
+}
+
+.interval-set {
+    background: rgba(255, 159, 10, 0.04);
+    border: 1px solid rgba(255, 159, 10, 0.15);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.interval-set-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.interval-set-label {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-remove-set {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.btn-remove-set:hover {
+    background: rgba(255, 0, 0, 0.1);
+    color: #FF3B30;
+}
+
+.interval-set-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.interval-pace-input {
+    padding: 8px 10px !important;
+    font-size: 0.85rem !important;
+    border-radius: var(--radius-sm) !important;
+    width: 100%;
+}
+
+.interval-repeats-input {
+    padding: 8px 10px !important;
+    font-size: 0.85rem !important;
+    border-radius: var(--radius-sm) !important;
+    width: 70px;
+}
+
+.add-set-btn {
+    margin: 6px 0 12px;
+    font-size: 0.8rem !important;
+    padding: 6px 14px !important;
+}
+
+/* Keep original week-level styles */
 .week-input-card {
     margin-bottom: 16px;
     padding: 20px;
@@ -504,27 +688,7 @@ select:focus {
 .day-inputs {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-}
-
-.day-input-row {
-    display: grid;
-    grid-template-columns: 50px 140px 1fr 70px 110px;
-    gap: 8px;
-    align-items: center;
-}
-
-.day-input-row input,
-.day-input-row select {
-    padding: 10px;
-    font-size: 0.85rem;
-    border-radius: var(--radius-sm);
-}
-
-.day-name-input {
-    text-align: center;
-    font-weight: 600;
-    background: rgba(0, 0, 0, 0.02) !important;
+    gap: 4px;
 }
 
 .create-plan-actions {
@@ -540,6 +704,7 @@ select:focus {
         opacity: 0;
         transform: translateY(-20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -547,19 +712,19 @@ select:focus {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 /* ═══ Responsive ═══ */
 @media (max-width: 768px) {
-    .day-input-row {
-        grid-template-columns: 50px 1fr;
-        gap: 6px;
-    }
-
-    .day-input-row .day-desc-input {
-        grid-column: 1 / -1;
+    .interval-set-fields {
+        grid-template-columns: 1fr 1fr;
     }
 }
 
@@ -583,5 +748,13 @@ select:focus {
 
     .card {
         padding: 20px;
+    }
+
+    .interval-set-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .day-editor-header {
+        flex-wrap: wrap;
     }
 }

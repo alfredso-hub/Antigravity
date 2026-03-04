@@ -493,6 +493,28 @@ function setupTabs() {
 function setupCreatePlan() {
     const addWeekBtn = document.getElementById('addWeekBtn');
     const createPlanForm = document.getElementById('createPlanForm');
+    const basePlanSelect = document.getElementById('basePlanSelect');
+
+    // Populate "base on existing plan" dropdown
+    if (basePlanSelect) {
+        populateBasePlanDropdown();
+        basePlanSelect.addEventListener('change', async () => {
+            const planId = basePlanSelect.value;
+            const container = document.getElementById('weekInputsContainer');
+            container.innerHTML = '';
+
+            if (!planId) {
+                // Start from scratch — add one empty week
+                container.appendChild(createWeekInput(1));
+            } else {
+                // Clone from existing plan
+                const weeks = await loadPlanWeeks(planId);
+                weeks.forEach((week, idx) => {
+                    container.appendChild(createWeekInput(idx + 1, week.days));
+                });
+            }
+        });
+    }
 
     if (addWeekBtn) {
         addWeekBtn.addEventListener('click', () => {
@@ -516,20 +538,9 @@ function setupCreatePlan() {
 
             weekCards.forEach(card => {
                 const days = [];
-                const dayRows = card.querySelectorAll('.day-input-row');
-                dayRows.forEach(row => {
-                    days.push({
-                        day: row.querySelector('.day-name-input').value,
-                        type: row.querySelector('.day-type-input').value,
-                        desc: row.querySelector('.day-desc-input').value,
-                        dist: parseFloat(row.querySelector('.day-dist-input').value) || 0,
-                        pace: row.querySelector('.day-pace-input').value,
-                        class: getClassFromType(row.querySelector('.day-type-input').value),
-                        stats: {
-                            total: parseFloat(row.querySelector('.day-dist-input').value) || 0,
-                            lt: 0, at: 0, aboveAt: 0
-                        }
-                    });
+                const dayEditors = card.querySelectorAll('.day-editor');
+                dayEditors.forEach(editor => {
+                    days.push(extractDayData(editor));
                 });
                 weeksData.push({ days });
             });
@@ -549,15 +560,170 @@ function setupCreatePlan() {
             } else {
                 submitBtn.textContent = '✓ Created!';
                 await populatePlanDropdown();
+                populateBasePlanDropdown();
                 setTimeout(() => {
                     submitBtn.textContent = 'Create Plan';
                     submitBtn.disabled = false;
-                    // Switch to plan view tab
                     document.querySelector('[data-tab="planViewTab"]').click();
                 }, 1500);
             }
         });
     }
+}
+
+function populateBasePlanDropdown() {
+    const basePlanSelect = document.getElementById('basePlanSelect');
+    if (!basePlanSelect) return;
+    // Keep the "Start from scratch" option
+    basePlanSelect.innerHTML = '<option value="">Start from scratch</option>';
+    allPlans.forEach(plan => {
+        const opt = document.createElement('option');
+        opt.value = plan.id;
+        opt.textContent = plan.name;
+        basePlanSelect.appendChild(opt);
+    });
+}
+
+// ─── Pace zone classification ───
+function closestPaceZone(paceMinKm) {
+    // Map user-entered pace (min/km as seconds) to closest training zone
+    // These are rough middle-ground values; the VDOT will refine at display time
+    const zones = [
+        { key: 'easy', label: 'E' },
+        { key: 'marathon', label: 'M' },
+        { key: 'threshold', label: 'T' },
+        { key: 'interval', label: 'I' },
+        { key: 'repetition', label: 'R' }
+    ];
+    // Just return the key — the rendering will match to actual VDOT paces
+    return paceMinKm; // we store raw pace, classification happens at render
+}
+
+// ─── Extract structured day data from editor DOM ───
+function extractDayData(editor) {
+    const dayName = editor.querySelector('.day-name-label').textContent;
+    const workoutType = editor.querySelector('.workout-type-select').value;
+
+    if (workoutType === 'easy') {
+        const dist = parseFloat(editor.querySelector('.easy-distance')?.value) || 0;
+        return {
+            day: dayName,
+            type: 'Easy',
+            desc: `${dist} km Easy`,
+            dist: dist,
+            pace: 'easy',
+            class: 'easy',
+            stats: { total: dist, lt: 0, at: 0, aboveAt: 0 },
+            structured: { workoutType: 'easy', distance: dist }
+        };
+    }
+
+    // Session or Long Run — parse structured intervals
+    const warmUp = parseStructuredValue(editor.querySelector('.warmup-section'));
+    const coolDown = parseStructuredValue(editor.querySelector('.cooldown-section'));
+    const sets = [];
+
+    editor.querySelectorAll('.interval-set').forEach(setEl => {
+        const duration = parseStructuredValue(setEl.querySelector('.interval-duration-section'));
+        const pace = setEl.querySelector('.interval-pace-input')?.value || '';
+        const rest = parseStructuredValue(setEl.querySelector('.interval-rest-section'));
+        const repeats = parseInt(setEl.querySelector('.interval-repeats-input')?.value) || 1;
+        sets.push({ duration, pace, rest, repeats });
+    });
+
+    // Build description
+    let desc = '';
+    let totalDist = 0;
+    let qualityDist = 0;
+
+    // Warm-up distance
+    const wuDist = getDistanceFromStructured(warmUp);
+    if (wuDist > 0) {
+        desc += `${formatStructured(warmUp)} WU, `;
+        totalDist += wuDist;
+    }
+
+    // Sets
+    sets.forEach((set, i) => {
+        const setDist = getDistanceFromStructured(set.duration);
+        const restDist = getDistanceFromStructured(set.rest);
+        const paceStr = set.pace ? ` @ ${set.pace}` : '';
+        const repsStr = set.repeats > 1 ? `${set.repeats}×` : '';
+        desc += `${repsStr}${formatStructured(set.duration)}${paceStr}`;
+        if (restDist > 0 || set.rest.value) {
+            desc += ` (${formatStructured(set.rest)} rest)`;
+        }
+        if (i < sets.length - 1) desc += ', ';
+
+        totalDist += (setDist + restDist) * set.repeats;
+        qualityDist += setDist * set.repeats;
+    });
+
+    // Cool-down distance
+    const cdDist = getDistanceFromStructured(coolDown);
+    if (cdDist > 0) {
+        desc += `, ${formatStructured(coolDown)} CD`;
+        totalDist += cdDist;
+    }
+
+    // Determine pace classification and stats
+    const dominantPace = determineDominantPace(sets);
+    const typeLabel = workoutType === 'long' ? 'Long' : 'Session';
+    const typeClass = workoutType === 'long' ? 'long' : (dominantPace === 'threshold' || dominantPace === 'marathon' ? 'tempo' : 'interval');
+
+    // Classify quality distance into stats buckets
+    const stats = { total: totalDist, lt: 0, at: 0, aboveAt: 0 };
+    if (dominantPace === 'marathon') stats.lt = qualityDist;
+    else if (dominantPace === 'threshold') stats.at = qualityDist;
+    else stats.aboveAt = qualityDist;
+
+    return {
+        day: dayName,
+        type: typeLabel,
+        desc: desc,
+        dist: totalDist,
+        pace: dominantPace || 'easy',
+        class: typeClass,
+        stats: stats,
+        structured: { workoutType, warmUp, coolDown, sets }
+    };
+}
+
+function parseStructuredValue(section) {
+    if (!section) return { value: 0, unit: 'km' };
+    const val = parseFloat(section.querySelector('.struct-value')?.value) || 0;
+    const unit = section.querySelector('.struct-unit')?.value || 'km';
+    return { value: val, unit };
+}
+
+function getDistanceFromStructured(sv) {
+    if (!sv || !sv.value) return 0;
+    if (sv.unit === 'km') return sv.value;
+    if (sv.unit === 'm') return sv.value / 1000;
+    if (sv.unit === 'min') return sv.value * 0.2; // rough ~5min/km estimate → 0.2 km/min
+    if (sv.unit === 'sec') return (sv.value / 60) * 0.2;
+    return sv.value;
+}
+
+function formatStructured(sv) {
+    if (!sv || !sv.value) return '';
+    return `${sv.value}${sv.unit}`;
+}
+
+function determineDominantPace(sets) {
+    // Try to classify based on entered paces
+    if (sets.length === 0) return 'easy';
+    // Parse the first set's pace as min/km (e.g. "4:30")
+    const firstPace = sets[0].pace;
+    if (!firstPace) return 'easy';
+    const paceSec = parseTimeInput(firstPace);
+    if (!paceSec) return 'easy';
+    // Rough classification by seconds/km
+    if (paceSec >= 330) return 'easy';       // > 5:30/km
+    if (paceSec >= 280) return 'marathon';   // > 4:40/km
+    if (paceSec >= 240) return 'threshold';  // > 4:00/km
+    if (paceSec >= 200) return 'interval';   // > 3:20/km
+    return 'repetition';
 }
 
 function getClassFromType(type) {
@@ -569,47 +735,219 @@ function getClassFromType(type) {
     return 'easy';
 }
 
-function createWeekInput(weekNumber) {
+// ─── Build a week input card ───
+function createWeekInput(weekNumber, existingDays = null) {
     const card = document.createElement('div');
     card.className = 'week-input-card card';
-    card.innerHTML = `
-        <div class="week-input-header">
-            <h3>Week ${weekNumber}</h3>
-            <button type="button" class="btn btn-sm btn-secondary remove-week-btn">✕ Remove</button>
-        </div>
-        <div class="day-inputs">
-            ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
-                <div class="day-input-row">
-                    <input type="text" class="day-name-input" value="${day}" readonly>
-                    <select class="day-type-input">
-                        <option value="Easy">Easy</option>
-                        <option value="Quality (T)">Quality (T)</option>
-                        <option value="Quality (I)">Quality (I)</option>
-                        <option value="Long">Long</option>
-                        <option value="Rest">Rest</option>
-                        <option value="Recovery">Recovery</option>
-                        <option value="Steady">Steady</option>
-                        <option value="RACE">Race</option>
-                    </select>
-                    <input type="text" class="day-desc-input" placeholder="Description">
-                    <input type="number" class="day-dist-input" placeholder="km" step="0.1" min="0">
-                    <select class="day-pace-input">
-                        <option value="easy">Easy</option>
-                        <option value="marathon">Marathon</option>
-                        <option value="threshold">Threshold</option>
-                        <option value="interval">Interval</option>
-                        <option value="repetition">Repetition</option>
-                    </select>
-                </div>
-            `).join('')}
-        </div>
+
+    const header = document.createElement('div');
+    header.className = 'week-input-header';
+    header.innerHTML = `
+        <h3>Week ${weekNumber}</h3>
+        <button type="button" class="btn btn-sm btn-secondary remove-week-btn">✕ Remove</button>
     `;
-    card.querySelector('.remove-week-btn').addEventListener('click', () => {
+    card.appendChild(header);
+
+    const daysContainer = document.createElement('div');
+    daysContainer.className = 'day-inputs';
+
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    dayNames.forEach((dayName, idx) => {
+        const existingDay = existingDays ? existingDays[idx] : null;
+        daysContainer.appendChild(createDayEditor(dayName, existingDay));
+    });
+
+    card.appendChild(daysContainer);
+
+    header.querySelector('.remove-week-btn').addEventListener('click', () => {
         card.remove();
-        // Renumber remaining weeks
         document.querySelectorAll('.week-input-card h3').forEach((h, i) => h.textContent = `Week ${i + 1}`);
     });
+
     return card;
+}
+
+// ─── Build a single day editor ───
+function createDayEditor(dayName, existingDay = null) {
+    const editor = document.createElement('div');
+    editor.className = 'day-editor';
+
+    // Determine initial workout type from existing data
+    let initialType = 'easy';
+    if (existingDay) {
+        const t = (existingDay.type || '').toLowerCase();
+        const hasStructured = existingDay.structured;
+        if (hasStructured) {
+            initialType = hasStructured.workoutType;
+        } else if (t.includes('rest') || t.includes('recovery') || t.includes('easy')) {
+            initialType = 'easy';
+        } else if (t.includes('long')) {
+            initialType = 'long';
+        } else {
+            initialType = 'session';
+        }
+    }
+
+    // Day header row
+    const headerRow = document.createElement('div');
+    headerRow.className = 'day-editor-header';
+    headerRow.innerHTML = `
+        <span class="day-name-label">${dayName}</span>
+        <select class="workout-type-select">
+            <option value="easy" ${initialType === 'easy' ? 'selected' : ''}>Easy / Recovery</option>
+            <option value="session" ${initialType === 'session' ? 'selected' : ''}>Session</option>
+            <option value="long" ${initialType === 'long' ? 'selected' : ''}>Long Run</option>
+        </select>
+    `;
+    editor.appendChild(headerRow);
+
+    // Fields container (changes based on workout type)
+    const fieldsContainer = document.createElement('div');
+    fieldsContainer.className = 'day-fields-container';
+    editor.appendChild(fieldsContainer);
+
+    // Wire type change
+    const typeSelect = headerRow.querySelector('.workout-type-select');
+    typeSelect.addEventListener('change', () => {
+        renderDayFields(fieldsContainer, typeSelect.value, null);
+    });
+
+    // Initial render
+    renderDayFields(fieldsContainer, initialType, existingDay);
+
+    return editor;
+}
+
+function renderDayFields(container, workoutType, existingDay) {
+    container.innerHTML = '';
+
+    if (workoutType === 'easy') {
+        const dist = existingDay?.dist || existingDay?.structured?.distance || '';
+        container.innerHTML = `
+            <div class="easy-fields">
+                <div class="field-row">
+                    <label>Distance (km)</label>
+                    <input type="number" class="easy-distance" value="${dist}" placeholder="e.g. 10" step="0.1" min="0">
+                </div>
+            </div>
+        `;
+    } else {
+        // Session or Long Run — structured input
+        const structured = existingDay?.structured;
+        const warmUp = structured?.warmUp || { value: '', unit: 'km' };
+        const coolDown = structured?.coolDown || { value: '', unit: 'km' };
+        const sets = structured?.sets || [{ duration: { value: '', unit: 'km' }, pace: '', rest: { value: '', unit: 'min' }, repeats: 1 }];
+
+        // Warm-up
+        const warmUpSection = createStructuredInput('Warm Up', warmUp, 'warmup-section');
+        container.appendChild(warmUpSection);
+
+        // Interval sets container
+        const setsContainer = document.createElement('div');
+        setsContainer.className = 'interval-sets-container';
+
+        sets.forEach((set, idx) => {
+            setsContainer.appendChild(createIntervalSet(idx, set));
+        });
+
+        container.appendChild(setsContainer);
+
+        // Add set button
+        const addSetBtn = document.createElement('button');
+        addSetBtn.type = 'button';
+        addSetBtn.className = 'btn btn-sm btn-secondary add-set-btn';
+        addSetBtn.textContent = '+ Add Set';
+        addSetBtn.addEventListener('click', () => {
+            const idx = setsContainer.querySelectorAll('.interval-set').length;
+            setsContainer.appendChild(createIntervalSet(idx));
+        });
+        container.appendChild(addSetBtn);
+
+        // Cool-down
+        const coolDownSection = createStructuredInput('Cool Down', coolDown, 'cooldown-section');
+        container.appendChild(coolDownSection);
+    }
+}
+
+function createStructuredInput(label, value, className) {
+    const section = document.createElement('div');
+    section.className = `structured-input-group ${className}`;
+    section.innerHTML = `
+        <label>${label}</label>
+        <div class="struct-row">
+            <input type="number" class="struct-value" value="${value?.value || ''}" placeholder="0" step="0.1" min="0">
+            <select class="struct-unit">
+                <option value="km" ${value?.unit === 'km' ? 'selected' : ''}>km</option>
+                <option value="m" ${value?.unit === 'm' ? 'selected' : ''}>m</option>
+                <option value="min" ${value?.unit === 'min' ? 'selected' : ''}>min</option>
+            </select>
+        </div>
+    `;
+    return section;
+}
+
+function createIntervalSet(index, data = null) {
+    const set = document.createElement('div');
+    set.className = 'interval-set';
+
+    const dur = data?.duration || { value: '', unit: 'km' };
+    const pace = data?.pace || '';
+    const rest = data?.rest || { value: '', unit: 'min' };
+    const repeats = data?.repeats || 1;
+
+    set.innerHTML = `
+        <div class="interval-set-header">
+            <span class="interval-set-label">Set ${index + 1}</span>
+            ${index > 0 ? '<button type="button" class="btn-remove-set" title="Remove set">✕</button>' : ''}
+        </div>
+        <div class="interval-set-fields">
+            <div class="structured-input-group interval-duration-section">
+                <label>Interval</label>
+                <div class="struct-row">
+                    <input type="number" class="struct-value" value="${dur.value || ''}" placeholder="0" step="0.1" min="0">
+                    <select class="struct-unit">
+                        <option value="km" ${dur.unit === 'km' ? 'selected' : ''}>km</option>
+                        <option value="m" ${dur.unit === 'm' ? 'selected' : ''}>m</option>
+                        <option value="min" ${dur.unit === 'min' ? 'selected' : ''}>min</option>
+                        <option value="sec" ${dur.unit === 'sec' ? 'selected' : ''}>sec</option>
+                    </select>
+                </div>
+            </div>
+            <div class="structured-input-group">
+                <label>Pace (min/km)</label>
+                <input type="text" class="interval-pace-input" value="${pace}" placeholder="e.g. 4:30">
+            </div>
+            <div class="structured-input-group interval-rest-section">
+                <label>Rest</label>
+                <div class="struct-row">
+                    <input type="number" class="struct-value" value="${rest.value || ''}" placeholder="0" step="0.1" min="0">
+                    <select class="struct-unit">
+                        <option value="min" ${rest.unit === 'min' ? 'selected' : ''}>min</option>
+                        <option value="sec" ${rest.unit === 'sec' ? 'selected' : ''}>sec</option>
+                        <option value="m" ${rest.unit === 'm' ? 'selected' : ''}>m</option>
+                        <option value="km" ${rest.unit === 'km' ? 'selected' : ''}>km</option>
+                    </select>
+                </div>
+            </div>
+            <div class="structured-input-group">
+                <label>Repeats</label>
+                <input type="number" class="interval-repeats-input" value="${repeats}" min="1" step="1">
+            </div>
+        </div>
+    `;
+
+    const removeBtn = set.querySelector('.btn-remove-set');
+    if (removeBtn) {
+        removeBtn.addEventListener('click', () => {
+            set.remove();
+            // Renumber remaining sets
+            set.closest('.interval-sets-container')?.querySelectorAll('.interval-set').forEach((s, i) => {
+                s.querySelector('.interval-set-label').textContent = `Set ${i + 1}`;
+            });
+        });
+    }
+
+    return set;
 }
 
 // ─── Init ───

@@ -160,7 +160,7 @@
                 <div class="card">
                     <h2 class="section-title">Create a New Training Plan</h2>
                     <p style="color:var(--text-secondary);margin-bottom:24px;">Build a custom plan that all users can
-                        access.</p>
+                        access. Start from scratch or base it on an existing plan.</p>
 
                     <form id="createPlanForm">
                         <div class="controls-grid" style="margin-bottom:24px;">
@@ -175,6 +175,13 @@
                                     <option value="10k">10km</option>
                                     <option value="half">Half Marathon</option>
                                     <option value="marathon" selected>Marathon</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="basePlanSelect">Base on Existing Plan</label>
+                                <select id="basePlanSelect">
+                                    <option value="">Start from scratch</option>
+                                    <!-- Populated dynamically -->
                                 </select>
                             </div>
                         </div>
