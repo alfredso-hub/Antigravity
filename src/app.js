@@ -686,6 +686,10 @@ function extractWorkoutData(card) {
     const workoutType = card.querySelector('.workout-type-select')?.value || 'easy';
     const description = card.querySelector('.workout-desc-input')?.value || '';
 
+    // Get user's actual VDOT paces for rest distance calculation
+    const vdot = getVDOT();
+    const userPaces = vdot ? calculatePacesFromVDOT(vdot) : null;
+
     if (workoutType === 'rest') {
         return {
             type: 'Rest',
@@ -740,7 +744,7 @@ function extractWorkoutData(card) {
 
     sets.forEach((set, i) => {
         const setDist = getDistanceFromStructured(set.duration);
-        const restDist = getRestDistance(set.rest, set.restType);
+        const restDist = getRestDistance(set.rest, set.restType, userPaces);
         const paceStr = formatPaceWithOffset(set.zone, set.offset);
         const repsStr = set.repeats > 1 ? `${set.repeats}×` : '';
         autoDesc += `${repsStr}${formatStructured(set.duration)} ${paceStr}`;
@@ -800,11 +804,11 @@ function getDistanceFromStructured(sv) {
     return sv.value;
 }
 
-// Rest distance depends on rest type:
+// Rest distance depends on rest type and the user's actual paces:
 // - Standing: 0 km (no movement)
-// - Jog: Easy pace + 1 min/km ≈ 6.5 min/km → ~0.154 km/min
-// - Float: T pace + 45s ≈ 5.0 min/km → ~0.200 km/min
-function getRestDistance(sv, restType) {
+// - Jog: user's Easy pace + 60s/km
+// - Float: user's Threshold pace + 45s/km
+function getRestDistance(sv, restType, userPaces) {
     if (!sv || !sv.value) return 0;
     if (restType === 'standing') return 0;
 
@@ -812,13 +816,18 @@ function getRestDistance(sv, restType) {
     if (sv.unit === 'km') return sv.value;
     if (sv.unit === 'm') return sv.value / 1000;
 
-    // For time-based rests, convert using estimated pace
-    const kmPerMin = restType === 'float'
-        ? (1 / 5.0)   // ~5:00/km (T + 45s)
-        : (1 / 6.5);  // ~6:30/km (E + 1 min) — default for jog
+    // For time-based rests, convert using user's actual pace
+    let paceSecPerKm;
+    if (restType === 'float') {
+        // Float = Threshold pace + 45s/km
+        paceSecPerKm = userPaces ? (userPaces.threshold + 45) : 300; // fallback ~5:00/km
+    } else {
+        // Jog = Easy pace + 60s/km
+        paceSecPerKm = userPaces ? (userPaces.easy + 60) : 390; // fallback ~6:30/km
+    }
 
     const minutes = sv.unit === 'min' ? sv.value : sv.value / 60;
-    return minutes * kmPerMin;
+    return minutes / (paceSecPerKm / 60); // minutes / (min/km) = km
 }
 
 function formatStructured(sv) {
