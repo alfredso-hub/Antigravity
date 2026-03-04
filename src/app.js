@@ -584,108 +584,162 @@ function populateBasePlanDropdown() {
     });
 }
 
-// ─── Pace zone classification ───
-function closestPaceZone(paceMinKm) {
-    // Map user-entered pace (min/km as seconds) to closest training zone
-    // These are rough middle-ground values; the VDOT will refine at display time
-    const zones = [
-        { key: 'easy', label: 'E' },
-        { key: 'marathon', label: 'M' },
-        { key: 'threshold', label: 'T' },
-        { key: 'interval', label: 'I' },
-        { key: 'repetition', label: 'R' }
-    ];
-    // Just return the key — the rendering will match to actual VDOT paces
-    return paceMinKm; // we store raw pace, classification happens at render
+// ─── VDOT Pace Zone helpers ───
+const PACE_ZONES = [
+    { key: 'easy', label: 'E (Easy)', short: 'E' },
+    { key: 'marathon', label: 'M (Marathon)', short: 'M' },
+    { key: 'threshold', label: 'T (Threshold)', short: 'T' },
+    { key: 'interval', label: 'I (Interval)', short: 'I' },
+    { key: 'repetition', label: 'R (Repetition)', short: 'R' }
+];
+
+function formatPaceWithOffset(zone, offsetSec) {
+    const z = PACE_ZONES.find(p => p.key === zone);
+    const label = z ? z.short : zone.toUpperCase();
+    if (!offsetSec || offsetSec === 0) return `@ ${label}`;
+    const sign = offsetSec > 0 ? '+' : '';
+    return `@ ${label} ${sign}${offsetSec}s`;
 }
 
-// ─── Extract structured day data from editor DOM ───
-function extractDayData(editor) {
-    const dayName = editor.querySelector('.day-name-label').textContent;
-    const workoutType = editor.querySelector('.workout-type-select').value;
+function paceZoneToStats(zone) {
+    if (zone === 'marathon') return 'lt';
+    if (zone === 'threshold') return 'at';
+    if (zone === 'interval' || zone === 'repetition') return 'aboveAt';
+    return null; // easy doesn't count as quality
+}
+
+function getClassFromPaceZone(zone) {
+    if (zone === 'marathon' || zone === 'threshold') return 'tempo';
+    if (zone === 'interval' || zone === 'repetition') return 'interval';
+    return 'easy';
+}
+
+// ─── Extract all workouts from a day editor into one day data object ───
+function extractDayData(dayEditor) {
+    const dayName = dayEditor.querySelector('.day-name-label').textContent;
+    const workoutCards = dayEditor.querySelectorAll('.workout-card');
+    const workouts = [];
+    let totalDist = 0;
+    let stats = { total: 0, lt: 0, at: 0, aboveAt: 0 };
+    let allDescs = [];
+    let dominantType = 'Easy';
+    let dominantClass = 'easy';
+    let dominantPace = 'easy';
+
+    workoutCards.forEach(card => {
+        const wo = extractWorkoutData(card);
+        workouts.push(wo);
+        totalDist += wo.dist;
+        stats.total += wo.stats.total;
+        stats.lt += wo.stats.lt;
+        stats.at += wo.stats.at;
+        stats.aboveAt += wo.stats.aboveAt;
+        if (wo.desc) allDescs.push(wo.desc);
+        // The most "intense" workout type wins
+        if (wo.type !== 'Easy') {
+            dominantType = wo.type;
+            dominantClass = wo.class;
+            dominantPace = wo.pace;
+        }
+    });
+
+    return {
+        day: dayName,
+        type: dominantType,
+        desc: allDescs.join(' + '),
+        dist: totalDist,
+        pace: dominantPace,
+        class: dominantClass,
+        stats: stats,
+        structured: { workouts }
+    };
+}
+
+function extractWorkoutData(card) {
+    const workoutType = card.querySelector('.workout-type-select')?.value || 'easy';
+    const description = card.querySelector('.workout-desc-input')?.value || '';
 
     if (workoutType === 'easy') {
-        const dist = parseFloat(editor.querySelector('.easy-distance')?.value) || 0;
+        const dist = parseFloat(card.querySelector('.easy-distance')?.value) || 0;
+        const userDesc = description || `${dist} km Easy`;
         return {
-            day: dayName,
             type: 'Easy',
-            desc: `${dist} km Easy`,
+            desc: userDesc,
             dist: dist,
             pace: 'easy',
             class: 'easy',
             stats: { total: dist, lt: 0, at: 0, aboveAt: 0 },
-            structured: { workoutType: 'easy', distance: dist }
+            structured: { workoutType: 'easy', distance: dist, description }
         };
     }
 
-    // Session or Long Run — parse structured intervals
-    const warmUp = parseStructuredValue(editor.querySelector('.warmup-section'));
-    const coolDown = parseStructuredValue(editor.querySelector('.cooldown-section'));
+    // Session or Long Run
+    const warmUp = parseStructuredValue(card.querySelector('.warmup-section'));
+    const coolDown = parseStructuredValue(card.querySelector('.cooldown-section'));
     const sets = [];
 
-    editor.querySelectorAll('.interval-set').forEach(setEl => {
+    card.querySelectorAll('.interval-set').forEach(setEl => {
         const duration = parseStructuredValue(setEl.querySelector('.interval-duration-section'));
-        const pace = setEl.querySelector('.interval-pace-input')?.value || '';
+        const zone = setEl.querySelector('.interval-zone-select')?.value || 'easy';
+        const offset = parseInt(setEl.querySelector('.interval-offset-input')?.value) || 0;
         const rest = parseStructuredValue(setEl.querySelector('.interval-rest-section'));
         const repeats = parseInt(setEl.querySelector('.interval-repeats-input')?.value) || 1;
-        sets.push({ duration, pace, rest, repeats });
+        sets.push({ duration, zone, offset, rest, repeats });
     });
 
-    // Build description
-    let desc = '';
+    // Build auto description if user didn't provide one
+    let autoDesc = '';
     let totalDist = 0;
-    let qualityDist = 0;
+    let qualityDist = {};  // zone -> distance
 
-    // Warm-up distance
     const wuDist = getDistanceFromStructured(warmUp);
     if (wuDist > 0) {
-        desc += `${formatStructured(warmUp)} WU, `;
+        autoDesc += `${formatStructured(warmUp)} WU, `;
         totalDist += wuDist;
     }
 
-    // Sets
     sets.forEach((set, i) => {
         const setDist = getDistanceFromStructured(set.duration);
         const restDist = getDistanceFromStructured(set.rest);
-        const paceStr = set.pace ? ` @ ${set.pace}` : '';
+        const paceStr = formatPaceWithOffset(set.zone, set.offset);
         const repsStr = set.repeats > 1 ? `${set.repeats}×` : '';
-        desc += `${repsStr}${formatStructured(set.duration)}${paceStr}`;
-        if (restDist > 0 || set.rest.value) {
-            desc += ` (${formatStructured(set.rest)} rest)`;
+        autoDesc += `${repsStr}${formatStructured(set.duration)} ${paceStr}`;
+        if (set.rest.value) {
+            autoDesc += ` (${formatStructured(set.rest)} rest)`;
         }
-        if (i < sets.length - 1) desc += ', ';
+        if (i < sets.length - 1) autoDesc += ', ';
 
         totalDist += (setDist + restDist) * set.repeats;
-        qualityDist += setDist * set.repeats;
+        const bucket = paceZoneToStats(set.zone);
+        if (bucket) {
+            qualityDist[bucket] = (qualityDist[bucket] || 0) + setDist * set.repeats;
+        }
     });
 
-    // Cool-down distance
     const cdDist = getDistanceFromStructured(coolDown);
     if (cdDist > 0) {
-        desc += `, ${formatStructured(coolDown)} CD`;
+        autoDesc += `, ${formatStructured(coolDown)} CD`;
         totalDist += cdDist;
     }
 
-    // Determine pace classification and stats
-    const dominantPace = determineDominantPace(sets);
+    const finalDesc = description || autoDesc;
+    const dominantZone = sets.length > 0 ? sets[0].zone : 'easy';
     const typeLabel = workoutType === 'long' ? 'Long' : 'Session';
-    const typeClass = workoutType === 'long' ? 'long' : (dominantPace === 'threshold' || dominantPace === 'marathon' ? 'tempo' : 'interval');
-
-    // Classify quality distance into stats buckets
-    const stats = { total: totalDist, lt: 0, at: 0, aboveAt: 0 };
-    if (dominantPace === 'marathon') stats.lt = qualityDist;
-    else if (dominantPace === 'threshold') stats.at = qualityDist;
-    else stats.aboveAt = qualityDist;
+    const typeClass = workoutType === 'long' ? 'long' : getClassFromPaceZone(dominantZone);
 
     return {
-        day: dayName,
         type: typeLabel,
-        desc: desc,
+        desc: finalDesc,
         dist: totalDist,
-        pace: dominantPace || 'easy',
+        pace: dominantZone,
         class: typeClass,
-        stats: stats,
-        structured: { workoutType, warmUp, coolDown, sets }
+        stats: {
+            total: totalDist,
+            lt: qualityDist.lt || 0,
+            at: qualityDist.at || 0,
+            aboveAt: qualityDist.aboveAt || 0
+        },
+        structured: { workoutType, description, warmUp, coolDown, sets }
     };
 }
 
@@ -700,7 +754,7 @@ function getDistanceFromStructured(sv) {
     if (!sv || !sv.value) return 0;
     if (sv.unit === 'km') return sv.value;
     if (sv.unit === 'm') return sv.value / 1000;
-    if (sv.unit === 'min') return sv.value * 0.2; // rough ~5min/km estimate → 0.2 km/min
+    if (sv.unit === 'min') return sv.value * 0.2;
     if (sv.unit === 'sec') return (sv.value / 60) * 0.2;
     return sv.value;
 }
@@ -708,22 +762,6 @@ function getDistanceFromStructured(sv) {
 function formatStructured(sv) {
     if (!sv || !sv.value) return '';
     return `${sv.value}${sv.unit}`;
-}
-
-function determineDominantPace(sets) {
-    // Try to classify based on entered paces
-    if (sets.length === 0) return 'easy';
-    // Parse the first set's pace as min/km (e.g. "4:30")
-    const firstPace = sets[0].pace;
-    if (!firstPace) return 'easy';
-    const paceSec = parseTimeInput(firstPace);
-    if (!paceSec) return 'easy';
-    // Rough classification by seconds/km
-    if (paceSec >= 330) return 'easy';       // > 5:30/km
-    if (paceSec >= 280) return 'marathon';   // > 4:40/km
-    if (paceSec >= 240) return 'threshold';  // > 4:00/km
-    if (paceSec >= 200) return 'interval';   // > 3:20/km
-    return 'repetition';
 }
 
 function getClassFromType(type) {
@@ -767,62 +805,196 @@ function createWeekInput(weekNumber, existingDays = null) {
     return card;
 }
 
-// ─── Build a single day editor ───
+// ─── Day Editor (multi-workout container) ───
 function createDayEditor(dayName, existingDay = null) {
     const editor = document.createElement('div');
     editor.className = 'day-editor';
 
-    // Determine initial workout type from existing data
-    let initialType = 'easy';
-    if (existingDay) {
-        const t = (existingDay.type || '').toLowerCase();
-        const hasStructured = existingDay.structured;
-        if (hasStructured) {
-            initialType = hasStructured.workoutType;
-        } else if (t.includes('rest') || t.includes('recovery') || t.includes('easy')) {
-            initialType = 'easy';
-        } else if (t.includes('long')) {
-            initialType = 'long';
-        } else {
-            initialType = 'session';
-        }
-    }
-
-    // Day header row
+    // Day header
     const headerRow = document.createElement('div');
     headerRow.className = 'day-editor-header';
-    headerRow.innerHTML = `
-        <span class="day-name-label">${dayName}</span>
+    headerRow.innerHTML = `<span class="day-name-label">${dayName}</span>`;
+    editor.appendChild(headerRow);
+
+    // Workouts container
+    const workoutsContainer = document.createElement('div');
+    workoutsContainer.className = 'workouts-container';
+    editor.appendChild(workoutsContainer);
+
+    // Add workout button (hidden initially, shown after first workout is "done")
+    const addWorkoutBtn = document.createElement('button');
+    addWorkoutBtn.type = 'button';
+    addWorkoutBtn.className = 'btn btn-sm btn-secondary add-workout-btn';
+    addWorkoutBtn.textContent = '+ Add Workout';
+    addWorkoutBtn.style.display = 'none';
+    addWorkoutBtn.addEventListener('click', () => {
+        const woCard = createWorkoutCard(workoutsContainer, addWorkoutBtn);
+        workoutsContainer.appendChild(woCard);
+        addWorkoutBtn.style.display = 'none';
+    });
+    editor.appendChild(addWorkoutBtn);
+
+    // Populate from existing data
+    if (existingDay?.structured?.workouts && existingDay.structured.workouts.length > 0) {
+        // Multi-workout format
+        existingDay.structured.workouts.forEach(wo => {
+            const woCard = createWorkoutCard(workoutsContainer, addWorkoutBtn, wo);
+            workoutsContainer.appendChild(woCard);
+        });
+        // Collapse all existing workouts
+        workoutsContainer.querySelectorAll('.workout-card').forEach(card => {
+            collapseWorkout(card, addWorkoutBtn);
+        });
+    } else if (existingDay) {
+        // Legacy single-workout format
+        const woCard = createWorkoutCard(workoutsContainer, addWorkoutBtn, {
+            structured: existingDay.structured || { workoutType: 'easy' },
+            type: existingDay.type,
+            desc: existingDay.desc,
+            dist: existingDay.dist,
+        });
+        workoutsContainer.appendChild(woCard);
+    } else {
+        // New empty day — one blank workout
+        const woCard = createWorkoutCard(workoutsContainer, addWorkoutBtn);
+        workoutsContainer.appendChild(woCard);
+    }
+
+    return editor;
+}
+
+// ─── Single Workout Card ───
+function createWorkoutCard(workoutsContainer, addWorkoutBtn, existingData = null) {
+    const card = document.createElement('div');
+    card.className = 'workout-card';
+
+    // Determine initial type
+    let initialType = 'easy';
+    if (existingData?.structured) {
+        initialType = existingData.structured.workoutType || 'easy';
+    } else if (existingData) {
+        const t = (existingData.type || '').toLowerCase();
+        if (t.includes('long')) initialType = 'long';
+        else if (!t.includes('easy') && !t.includes('rest') && !t.includes('recovery')) initialType = 'session';
+    }
+
+    const existingDesc = existingData?.structured?.description || existingData?.desc || '';
+
+    // Editable view
+    const editView = document.createElement('div');
+    editView.className = 'workout-edit-view';
+
+    // Top row: type + description
+    const topRow = document.createElement('div');
+    topRow.className = 'workout-top-row';
+    topRow.innerHTML = `
         <select class="workout-type-select">
             <option value="easy" ${initialType === 'easy' ? 'selected' : ''}>Easy / Recovery</option>
             <option value="session" ${initialType === 'session' ? 'selected' : ''}>Session</option>
             <option value="long" ${initialType === 'long' ? 'selected' : ''}>Long Run</option>
         </select>
+        <input type="text" class="workout-desc-input" placeholder="Description (optional)" value="${escapeHtml(existingDesc)}">
     `;
-    editor.appendChild(headerRow);
+    editView.appendChild(topRow);
 
-    // Fields container (changes based on workout type)
+    // Fields container
     const fieldsContainer = document.createElement('div');
-    fieldsContainer.className = 'day-fields-container';
-    editor.appendChild(fieldsContainer);
+    fieldsContainer.className = 'workout-fields-container';
+    editView.appendChild(fieldsContainer);
+
+    // Action row
+    const actionRow = document.createElement('div');
+    actionRow.className = 'workout-action-row';
+    const doneBtn = document.createElement('button');
+    doneBtn.type = 'button';
+    doneBtn.className = 'btn btn-sm btn-primary workout-done-btn';
+    doneBtn.textContent = '✓ Done';
+    actionRow.appendChild(doneBtn);
+
+    // Remove button (if not the first workout)
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-sm btn-secondary workout-remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.addEventListener('click', () => {
+        card.remove();
+        // Show add button if there's at least one collapsed workout
+        if (workoutsContainer.querySelectorAll('.workout-card').length === 0) {
+            // Add back a blank workout
+            const newCard = createWorkoutCard(workoutsContainer, addWorkoutBtn);
+            workoutsContainer.appendChild(newCard);
+        }
+        addWorkoutBtn.style.display = 'inline-flex';
+    });
+    actionRow.appendChild(removeBtn);
+
+    editView.appendChild(actionRow);
+    card.appendChild(editView);
+
+    // Collapsed summary view (hidden initially)
+    const summaryView = document.createElement('div');
+    summaryView.className = 'workout-summary-view';
+    summaryView.style.display = 'none';
+    card.appendChild(summaryView);
 
     // Wire type change
-    const typeSelect = headerRow.querySelector('.workout-type-select');
+    const typeSelect = topRow.querySelector('.workout-type-select');
     typeSelect.addEventListener('change', () => {
-        renderDayFields(fieldsContainer, typeSelect.value, null);
+        renderWorkoutFields(fieldsContainer, typeSelect.value, null);
     });
 
-    // Initial render
-    renderDayFields(fieldsContainer, initialType, existingDay);
+    // Wire done button
+    doneBtn.addEventListener('click', () => {
+        collapseWorkout(card, addWorkoutBtn);
+    });
 
-    return editor;
+    // Initial field render
+    renderWorkoutFields(fieldsContainer, initialType, existingData);
+
+    return card;
 }
 
-function renderDayFields(container, workoutType, existingDay) {
+function collapseWorkout(card, addWorkoutBtn) {
+    const editView = card.querySelector('.workout-edit-view');
+    const summaryView = card.querySelector('.workout-summary-view');
+
+    // Extract a summary from the current state
+    const wo = extractWorkoutData(card);
+    const typeLabel = wo.type;
+    const distStr = wo.dist > 0 ? `${wo.dist.toFixed(1)} km` : '';
+    const descStr = wo.desc || '';
+
+    summaryView.innerHTML = `
+        <div class="summary-content">
+            <span class="summary-type type-${wo.class}">${typeLabel}</span>
+            <span class="summary-desc">${descStr}</span>
+            ${distStr ? `<span class="summary-dist">${distStr}</span>` : ''}
+        </div>
+        <button type="button" class="btn btn-sm btn-secondary workout-edit-btn">Edit</button>
+    `;
+
+    editView.style.display = 'none';
+    summaryView.style.display = 'flex';
+    addWorkoutBtn.style.display = 'inline-flex';
+
+    // Wire edit button
+    summaryView.querySelector('.workout-edit-btn').addEventListener('click', () => {
+        editView.style.display = 'block';
+        summaryView.style.display = 'none';
+        addWorkoutBtn.style.display = 'none';
+    });
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderWorkoutFields(container, workoutType, existingData) {
     container.innerHTML = '';
 
     if (workoutType === 'easy') {
-        const dist = existingDay?.dist || existingDay?.structured?.distance || '';
+        const dist = existingData?.dist || existingData?.structured?.distance || '';
         container.innerHTML = `
             <div class="easy-fields">
                 <div class="field-row">
@@ -832,24 +1004,21 @@ function renderDayFields(container, workoutType, existingDay) {
             </div>
         `;
     } else {
-        // Session or Long Run — structured input
-        const structured = existingDay?.structured;
+        // Session or Long Run
+        const structured = existingData?.structured;
         const warmUp = structured?.warmUp || { value: '', unit: 'km' };
         const coolDown = structured?.coolDown || { value: '', unit: 'km' };
-        const sets = structured?.sets || [{ duration: { value: '', unit: 'km' }, pace: '', rest: { value: '', unit: 'min' }, repeats: 1 }];
+        const sets = structured?.sets || [{ duration: { value: '', unit: 'km' }, zone: 'threshold', offset: 0, rest: { value: '', unit: 'min' }, repeats: 1 }];
 
         // Warm-up
-        const warmUpSection = createStructuredInput('Warm Up', warmUp, 'warmup-section');
-        container.appendChild(warmUpSection);
+        container.appendChild(createStructuredInput('Warm Up', warmUp, 'warmup-section'));
 
-        // Interval sets container
+        // Interval sets
         const setsContainer = document.createElement('div');
         setsContainer.className = 'interval-sets-container';
-
         sets.forEach((set, idx) => {
             setsContainer.appendChild(createIntervalSet(idx, set));
         });
-
         container.appendChild(setsContainer);
 
         // Add set button
@@ -864,8 +1033,7 @@ function renderDayFields(container, workoutType, existingDay) {
         container.appendChild(addSetBtn);
 
         // Cool-down
-        const coolDownSection = createStructuredInput('Cool Down', coolDown, 'cooldown-section');
-        container.appendChild(coolDownSection);
+        container.appendChild(createStructuredInput('Cool Down', coolDown, 'cooldown-section'));
     }
 }
 
@@ -891,7 +1059,8 @@ function createIntervalSet(index, data = null) {
     set.className = 'interval-set';
 
     const dur = data?.duration || { value: '', unit: 'km' };
-    const pace = data?.pace || '';
+    const zone = data?.zone || data?.pace || 'threshold';  // backwards compat: old data had 'pace' as raw string
+    const offset = data?.offset || 0;
     const rest = data?.rest || { value: '', unit: 'min' };
     const repeats = data?.repeats || 1;
 
@@ -913,9 +1082,14 @@ function createIntervalSet(index, data = null) {
                     </select>
                 </div>
             </div>
-            <div class="structured-input-group">
-                <label>Pace (min/km)</label>
-                <input type="text" class="interval-pace-input" value="${pace}" placeholder="e.g. 4:30">
+            <div class="structured-input-group interval-pace-group">
+                <label>Pace</label>
+                <div class="pace-zone-row">
+                    <select class="interval-zone-select">
+                        ${PACE_ZONES.map(z => `<option value="${z.key}" ${z.key === zone ? 'selected' : ''}>${z.label}</option>`).join('')}
+                    </select>
+                    <input type="number" class="interval-offset-input" value="${offset || ''}" placeholder="±sec" title="Offset in sec/km (e.g. -5 or +3)">
+                </div>
             </div>
             <div class="structured-input-group interval-rest-section">
                 <label>Rest</label>
@@ -939,9 +1113,9 @@ function createIntervalSet(index, data = null) {
     const removeBtn = set.querySelector('.btn-remove-set');
     if (removeBtn) {
         removeBtn.addEventListener('click', () => {
+            const parent = set.closest('.interval-sets-container');
             set.remove();
-            // Renumber remaining sets
-            set.closest('.interval-sets-container')?.querySelectorAll('.interval-set').forEach((s, i) => {
+            parent?.querySelectorAll('.interval-set').forEach((s, i) => {
                 s.querySelector('.interval-set-label').textContent = `Set ${i + 1}`;
             });
         });

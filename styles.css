@@ -515,8 +515,8 @@ select:focus {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.02);
+    padding: 10px 16px;
+    background: rgba(0, 0, 0, 0.03);
     border-bottom: 1px solid var(--border);
 }
 
@@ -529,16 +529,136 @@ select:focus {
     min-width: 36px;
 }
 
+/* Workouts container */
+.workouts-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* Add workout button */
+.add-workout-btn {
+    margin: 8px 16px 12px;
+    align-self: flex-start;
+}
+
+/* Single workout card */
+.workout-card {
+    border-bottom: 1px solid var(--border);
+}
+
+.workout-card:last-child {
+    border-bottom: none;
+}
+
+.workout-edit-view {
+    padding: 12px 16px;
+}
+
+.workout-top-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
 .workout-type-select {
     padding: 8px 12px !important;
     font-size: 0.85rem !important;
     border-radius: var(--radius-sm) !important;
-    flex: 1;
-    max-width: 200px;
+    min-width: 150px;
 }
 
-.day-fields-container {
-    padding: 12px 16px;
+.workout-desc-input {
+    flex: 1;
+    padding: 8px 12px !important;
+    font-size: 0.85rem !important;
+    border-radius: var(--radius-sm) !important;
+}
+
+.workout-fields-container {
+    margin-bottom: 8px;
+}
+
+.workout-action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.workout-done-btn {
+    padding: 6px 18px !important;
+}
+
+/* Collapsed summary view */
+.workout-summary-view {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    gap: 12px;
+    cursor: default;
+    transition: background 0.15s;
+}
+
+.workout-summary-view:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.summary-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.summary-type {
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.summary-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.summary-dist {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-main);
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.04);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* Pace zone row */
+.pace-zone-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.interval-zone-select {
+    padding: 8px 8px !important;
+    font-size: 0.82rem !important;
+    border-radius: var(--radius-sm) !important;
+    min-width: 100px;
+}
+
+.interval-offset-input {
+    padding: 8px 8px !important;
+    font-size: 0.82rem !important;
+    border-radius: var(--radius-sm) !important;
+    width: 65px;
 }
 
 /* Easy fields */
