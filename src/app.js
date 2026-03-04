@@ -227,19 +227,19 @@ function renderChart(weeks, unit) {
                     borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
                 },
                 {
-                    label: 'LT Distance',
+                    label: 'LT (M pace)',
                     data: stats.map(s => (s.lt * factor).toFixed(1)),
                     borderColor: '#FF9F0A', backgroundColor: '#FF9F0A',
                     borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
                 },
                 {
-                    label: 'AT Distance',
+                    label: 'AT (M→T)',
                     data: stats.map(s => (s.at * factor).toFixed(1)),
                     borderColor: '#0A84FF', backgroundColor: '#0A84FF',
                     borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
                 },
                 {
-                    label: 'VO2 Distance',
+                    label: 'VO2 (I & R)',
                     data: stats.map(s => (s.aboveAt * factor).toFixed(1)),
                     borderColor: '#FF453A', backgroundColor: '#FF453A',
                     borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
