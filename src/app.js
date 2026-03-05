@@ -739,25 +739,37 @@ function extractWorkoutData(card) {
         };
     }
 
-    // Session or Long Run
+    // Session, Long Run, or Hills
     const warmUp = parseStructuredValue(card.querySelector('.warmup-section'));
     const coolDown = parseStructuredValue(card.querySelector('.cooldown-section'));
-    const sets = [];
+    const items = []; // mixed array of standalone sets and groups
 
-    card.querySelectorAll('.interval-set').forEach(setEl => {
-        const duration = parseStructuredValue(setEl.querySelector('.interval-duration-section'));
-        const zone = setEl.querySelector('.interval-zone-select')?.value || 'easy';
-        const offset = parseInt(setEl.querySelector('.interval-offset-input')?.value) || 0;
-        const rest = parseStructuredValue(setEl.querySelector('.interval-rest-section'));
-        const restType = setEl.querySelector('.interval-rest-type')?.value || 'jog';
-        const repeats = parseInt(setEl.querySelector('.interval-repeats-input')?.value) || 1;
-        sets.push({ duration, zone, offset, rest, restType, repeats });
-    });
+    // Extract from the interval-sets-container children
+    const setsContainer = card.querySelector('.interval-sets-container');
+    if (setsContainer) {
+        Array.from(setsContainer.children).forEach(child => {
+            if (child.classList.contains('interval-group')) {
+                // Group
+                const groupRepeats = parseInt(child.querySelector('.group-repeats-input')?.value) || 1;
+                const setRest = parseStructuredValue(child.querySelector('.group-rest-section'));
+                const setRestType = child.querySelector('.group-rest-type')?.value || 'standing';
+                const intervals = [];
+                child.querySelectorAll('.interval-item').forEach(itemEl => {
+                    intervals.push(extractIntervalData(itemEl));
+                });
+                items.push({ type: 'group', repeats: groupRepeats, setRest, setRestType, intervals });
+            } else if (child.classList.contains('interval-set')) {
+                // Standalone set
+                const data = extractIntervalData(child);
+                items.push({ type: 'set', ...data });
+            }
+        });
+    }
 
-    // Build auto description if user didn't provide one
+    // Build auto description + distance + stats
     let autoDesc = '';
     let totalDist = 0;
-    let qualityDist = {};  // zone -> distance
+    let qualityDist = {};
 
     const wuDist = getDistanceFromStructured(warmUp);
     if (wuDist > 0) {
@@ -765,23 +777,43 @@ function extractWorkoutData(card) {
         totalDist += wuDist;
     }
 
-    sets.forEach((set, i) => {
-        const setDist = getDistanceFromStructured(set.duration);
-        const restDist = getRestDistance(set.rest, set.restType, userPaces);
-        const paceStr = formatPaceWithOffset(set.zone, set.offset);
-        const repsStr = set.repeats > 1 ? `${set.repeats}×` : '';
-        autoDesc += `${repsStr}${formatStructured(set.duration)} ${paceStr}`;
-        if (set.rest.value) {
-            const restTypeLabel = set.restType === 'standing' ? 'standing' : set.restType === 'float' ? 'float' : 'jog';
-            autoDesc += ` (${formatStructured(set.rest)} ${restTypeLabel})`;
+    items.forEach((item, i) => {
+        if (item.type === 'group') {
+            const R = item.repeats;
+            const repsStr = R > 1 ? `${R}×` : '';
+            let innerParts = [];
+            let innerDist = 0;
+            item.intervals.forEach(iv => {
+                const d = getDistanceFromStructured(iv.duration);
+                const rd = getRestDistance(iv.rest, iv.restType, userPaces);
+                innerDist += d + rd;
+                const bucket = paceZoneToStats(iv.zone);
+                if (bucket) qualityDist[bucket] = (qualityDist[bucket] || 0) + d * R;
+                innerParts.push(`${formatStructured(iv.duration)} ${formatPaceWithOffset(iv.zone, iv.offset)}`);
+            });
+            const setRestDist = getRestDistance(item.setRest, item.setRestType, userPaces);
+            totalDist += R * innerDist + (R - 1) * setRestDist;
+            autoDesc += `${repsStr}(${innerParts.join(' + ')})`;
+            if (item.setRest?.value) {
+                const rtl = item.setRestType === 'standing' ? 'standing' : item.setRestType === 'float' ? 'float' : 'jog';
+                autoDesc += ` [${formatStructured(item.setRest)} ${rtl} between]`;
+            }
+        } else {
+            // Standalone set
+            const setDist = getDistanceFromStructured(item.duration);
+            const restDist = getRestDistance(item.rest, item.restType, userPaces);
+            const paceStr = formatPaceWithOffset(item.zone, item.offset);
+            const repsStr = item.repeats > 1 ? `${item.repeats}×` : '';
+            autoDesc += `${repsStr}${formatStructured(item.duration)} ${paceStr}`;
+            if (item.rest?.value) {
+                const rtl = item.restType === 'standing' ? 'standing' : item.restType === 'float' ? 'float' : 'jog';
+                autoDesc += ` (${formatStructured(item.rest)} ${rtl})`;
+            }
+            totalDist += (setDist + restDist) * (item.repeats || 1);
+            const bucket = paceZoneToStats(item.zone);
+            if (bucket) qualityDist[bucket] = (qualityDist[bucket] || 0) + setDist * (item.repeats || 1);
         }
-        if (i < sets.length - 1) autoDesc += ', ';
-
-        totalDist += (setDist + restDist) * set.repeats;
-        const bucket = paceZoneToStats(set.zone);
-        if (bucket) {
-            qualityDist[bucket] = (qualityDist[bucket] || 0) + setDist * set.repeats;
-        }
+        if (i < items.length - 1) autoDesc += ', ';
     });
 
     const cdDist = getDistanceFromStructured(coolDown);
@@ -791,15 +823,17 @@ function extractWorkoutData(card) {
     }
 
     const finalDesc = description || autoDesc;
-    const dominantZone = sets.length > 0 ? sets[0].zone : 'easy';
+    const firstZone = items.length > 0
+        ? (items[0].type === 'group' ? (items[0].intervals[0]?.zone || 'easy') : (items[0].zone || 'easy'))
+        : 'easy';
     const typeLabel = workoutType === 'long' ? 'Long' : workoutType === 'hills' ? 'Hills' : 'Session';
-    const typeClass = workoutType === 'long' ? 'long' : workoutType === 'hills' ? 'interval' : getClassFromPaceZone(dominantZone);
+    const typeClass = workoutType === 'long' ? 'long' : workoutType === 'hills' ? 'interval' : getClassFromPaceZone(firstZone);
 
     return {
         type: typeLabel,
         desc: finalDesc,
         dist: totalDist,
-        pace: dominantZone,
+        pace: firstZone,
         class: typeClass,
         stats: {
             total: totalDist,
@@ -807,8 +841,19 @@ function extractWorkoutData(card) {
             at: qualityDist.at || 0,
             aboveAt: qualityDist.aboveAt || 0
         },
-        structured: { workoutType, description, warmUp, coolDown, sets }  // sets include restType
+        structured: { workoutType, description, warmUp, coolDown, sets: items }
     };
+}
+
+// Extract duration/zone/offset/rest/restType/repeats from a single interval element
+function extractIntervalData(el) {
+    const duration = parseStructuredValue(el.querySelector('.interval-duration-section'));
+    const zone = el.querySelector('.interval-zone-select')?.value || 'easy';
+    const offset = parseInt(el.querySelector('.interval-offset-input')?.value) || 0;
+    const rest = parseStructuredValue(el.querySelector('.interval-rest-section'));
+    const restType = el.querySelector('.interval-rest-type')?.value || 'jog';
+    const repeats = parseInt(el.querySelector('.interval-repeats-input')?.value) || 1;
+    return { duration, zone, offset, rest, restType, repeats };
 }
 
 function parseStructuredValue(section) {
@@ -1127,29 +1172,82 @@ function renderWorkoutFields(container, workoutType, existingData) {
         const structured = existingData?.structured;
         const warmUp = structured?.warmUp || { value: '', unit: 'km' };
         const coolDown = structured?.coolDown || { value: '', unit: 'km' };
-        const sets = structured?.sets || [{ duration: { value: '', unit: 'km' }, zone: 'threshold', offset: 0, rest: { value: '', unit: 'min' }, restType: 'jog', repeats: 1 }];
+        const existingItems = structured?.sets || [{ duration: { value: '', unit: 'km' }, zone: 'threshold', offset: 0, rest: { value: '', unit: 'min' }, restType: 'jog', repeats: 1 }];
 
         // Warm-up
         container.appendChild(createStructuredInput('Warm Up', warmUp, 'warmup-section'));
 
-        // Interval sets
+        // Interval sets container (holds standalone sets AND groups)
         const setsContainer = document.createElement('div');
         setsContainer.className = 'interval-sets-container';
-        sets.forEach((set, idx) => {
-            setsContainer.appendChild(createIntervalSet(idx, set));
+        let itemIdx = 0;
+        existingItems.forEach(item => {
+            if (item.type === 'group') {
+                setsContainer.appendChild(createIntervalGroup(setsContainer, item));
+            } else {
+                setsContainer.appendChild(createIntervalSet(itemIdx, item, setsContainer));
+                itemIdx++;
+            }
         });
         container.appendChild(setsContainer);
 
-        // Add set button
+        // Button row
+        const btnRow = document.createElement('div');
+        btnRow.className = 'interval-btn-row';
+
         const addSetBtn = document.createElement('button');
         addSetBtn.type = 'button';
-        addSetBtn.className = 'btn btn-sm btn-secondary add-set-btn';
+        addSetBtn.className = 'btn btn-sm btn-secondary';
         addSetBtn.textContent = '+ Add Set';
         addSetBtn.addEventListener('click', () => {
             const idx = setsContainer.querySelectorAll('.interval-set').length;
-            setsContainer.appendChild(createIntervalSet(idx));
+            setsContainer.appendChild(createIntervalSet(idx, null, setsContainer));
+            renumberItems(setsContainer);
         });
-        container.appendChild(addSetBtn);
+        btnRow.appendChild(addSetBtn);
+
+        const addGroupBtn = document.createElement('button');
+        addGroupBtn.type = 'button';
+        addGroupBtn.className = 'btn btn-sm btn-secondary';
+        addGroupBtn.textContent = '+ Add Group';
+        addGroupBtn.addEventListener('click', () => {
+            setsContainer.appendChild(createIntervalGroup(setsContainer));
+            renumberItems(setsContainer);
+        });
+        btnRow.appendChild(addGroupBtn);
+
+        const groupSelectedBtn = document.createElement('button');
+        groupSelectedBtn.type = 'button';
+        groupSelectedBtn.className = 'btn btn-sm btn-secondary group-selected-btn';
+        groupSelectedBtn.textContent = 'Group Selected';
+        groupSelectedBtn.disabled = true;
+        groupSelectedBtn.addEventListener('click', () => {
+            const checked = setsContainer.querySelectorAll('.interval-set .set-select-cb:checked');
+            if (checked.length < 2) return;
+            const selectedSets = Array.from(checked).map(cb => cb.closest('.interval-set'));
+            const intervalsData = selectedSets.map(el => extractIntervalData(el));
+            const insertRef = selectedSets[0];
+            selectedSets.forEach(s => s.remove());
+            const group = createIntervalGroup(setsContainer, { type: 'group', repeats: 1, setRest: { value: '', unit: 'min' }, setRestType: 'standing', intervals: intervalsData });
+            if (insertRef && insertRef.parentElement) {
+                setsContainer.insertBefore(group, insertRef);
+            } else {
+                setsContainer.appendChild(group);
+            }
+            renumberItems(setsContainer);
+            groupSelectedBtn.disabled = true;
+        });
+        btnRow.appendChild(groupSelectedBtn);
+
+        container.appendChild(btnRow);
+
+        // Checkbox delegation for Group Selected button
+        setsContainer.addEventListener('change', (e) => {
+            if (e.target.classList.contains('set-select-cb')) {
+                const count = setsContainer.querySelectorAll('.interval-set .set-select-cb:checked').length;
+                groupSelectedBtn.disabled = count < 2;
+            }
+        });
 
         // Cool-down
         container.appendChild(createStructuredInput('Cool Down', coolDown, 'cooldown-section'));
@@ -1173,7 +1271,30 @@ function createStructuredInput(label, value, className) {
     return section;
 }
 
-function createIntervalSet(index, data = null) {
+function renumberItems(setsContainer) {
+    let setIdx = 0;
+    let groupIdx = 0;
+    Array.from(setsContainer.children).forEach(child => {
+        if (child.classList.contains('interval-set')) {
+            setIdx++;
+            const lbl = child.querySelector('.interval-set-label');
+            if (lbl) lbl.textContent = `Set ${setIdx}`;
+        } else if (child.classList.contains('interval-group')) {
+            groupIdx++;
+            const lbl = child.querySelector('.group-label');
+            if (lbl) lbl.textContent = `Group ${groupIdx}`;
+            let ivIdx = 0;
+            child.querySelectorAll('.interval-item').forEach(item => {
+                ivIdx++;
+                const ivLbl = item.querySelector('.interval-item-label');
+                if (ivLbl) ivLbl.textContent = `Interval ${ivIdx}`;
+            });
+        }
+    });
+}
+
+// ─── Standalone Interval Set (with checkbox for grouping) ───
+function createIntervalSet(index, data = null, setsContainer = null) {
     const set = document.createElement('div');
     set.className = 'interval-set';
 
@@ -1186,8 +1307,8 @@ function createIntervalSet(index, data = null) {
 
     set.innerHTML = `
         <div class="interval-set-header">
-            <span class="interval-set-label">Set ${index + 1}</span>
-            ${index > 0 ? '<button type="button" class="btn-remove-set" title="Remove set">✕</button>' : ''}
+            <label class="set-select-label"><input type="checkbox" class="set-select-cb"> <span class="interval-set-label">Set ${index + 1}</span></label>
+            <button type="button" class="btn-remove-set" title="Remove set">✕</button>
         </div>
         <div class="interval-set-fields">
             <div class="structured-input-group interval-duration-section">
@@ -1208,7 +1329,7 @@ function createIntervalSet(index, data = null) {
                     <select class="interval-zone-select">
                         ${PACE_ZONES.map(z => `<option value="${z.key}" ${z.key === zone ? 'selected' : ''}>${z.label}</option>`).join('')}
                     </select>
-                    <input type="number" class="interval-offset-input" value="${offset || ''}" placeholder="±sec" title="Offset in sec/km (e.g. -5 or +3)">
+                    <input type="number" class="interval-offset-input" value="${offset || ''}" placeholder="±sec" title="Offset in sec/km">
                 </div>
             </div>
             <div class="structured-input-group interval-rest-section">
@@ -1235,18 +1356,176 @@ function createIntervalSet(index, data = null) {
         </div>
     `;
 
-    const removeBtn = set.querySelector('.btn-remove-set');
+    set.querySelector('.btn-remove-set').addEventListener('click', () => {
+        set.remove();
+        if (setsContainer) renumberItems(setsContainer);
+    });
+
+    return set;
+}
+
+// ─── Interval Group (contains multiple interval-items) ───
+function createIntervalGroup(setsContainer, data = null) {
+    const group = document.createElement('div');
+    group.className = 'interval-group';
+
+    const groupRepeats = data?.repeats || 1;
+    const setRest = data?.setRest || { value: '', unit: 'min' };
+    const setRestType = data?.setRestType || 'standing';
+    const intervals = data?.intervals || [
+        { duration: { value: '', unit: 'km' }, zone: 'threshold', offset: 0, rest: { value: '', unit: 'min' }, restType: 'jog' }
+    ];
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'interval-group-header';
+    header.innerHTML = `
+        <span class="group-label">Group</span>
+        <span class="group-repeats-label">×</span>
+        <input type="number" class="group-repeats-input" value="${groupRepeats}" min="1" step="1" title="Group repeats">
+        <div class="group-header-actions">
+            <button type="button" class="btn-ungroup" title="Ungroup">⊟ Ungroup</button>
+            <button type="button" class="btn-remove-group" title="Remove group">✕</button>
+        </div>
+    `;
+    group.appendChild(header);
+
+    // Body (interval items)
+    const body = document.createElement('div');
+    body.className = 'interval-group-body';
+    intervals.forEach((iv, idx) => {
+        body.appendChild(createIntervalItem(idx, iv, body));
+    });
+    group.appendChild(body);
+
+    // Footer (set rest + add interval)
+    const footer = document.createElement('div');
+    footer.className = 'interval-group-footer';
+    footer.innerHTML = `
+        <div class="structured-input-group group-rest-section">
+            <label>Set Rest (between group reps)</label>
+            <div class="struct-row">
+                <input type="number" class="struct-value" value="${setRest.value || ''}" placeholder="0" step="0.1" min="0">
+                <select class="struct-unit">
+                    <option value="min" ${setRest.unit === 'min' ? 'selected' : ''}>min</option>
+                    <option value="sec" ${setRest.unit === 'sec' ? 'selected' : ''}>sec</option>
+                    <option value="m" ${setRest.unit === 'm' ? 'selected' : ''}>m</option>
+                    <option value="km" ${setRest.unit === 'km' ? 'selected' : ''}>km</option>
+                </select>
+                <select class="group-rest-type" title="Rest type">
+                    <option value="standing" ${setRestType === 'standing' ? 'selected' : ''}>Standing</option>
+                    <option value="jog" ${setRestType === 'jog' ? 'selected' : ''}>Jog</option>
+                    <option value="float" ${setRestType === 'float' ? 'selected' : ''}>Float</option>
+                </select>
+            </div>
+        </div>
+    `;
+    const addIntervalBtn = document.createElement('button');
+    addIntervalBtn.type = 'button';
+    addIntervalBtn.className = 'btn btn-sm btn-secondary add-interval-btn';
+    addIntervalBtn.textContent = '+ Add Interval';
+    addIntervalBtn.addEventListener('click', () => {
+        const idx = body.querySelectorAll('.interval-item').length;
+        body.appendChild(createIntervalItem(idx, null, body));
+    });
+    footer.appendChild(addIntervalBtn);
+    group.appendChild(footer);
+
+    // Wire remove group
+    header.querySelector('.btn-remove-group').addEventListener('click', () => {
+        group.remove();
+        if (setsContainer) renumberItems(setsContainer);
+    });
+
+    // Wire ungroup — convert group intervals back to standalone sets
+    header.querySelector('.btn-ungroup').addEventListener('click', () => {
+        const items = body.querySelectorAll('.interval-item');
+        const parentContainer = group.parentElement;
+        items.forEach(itemEl => {
+            const ivData = extractIntervalData(itemEl);
+            const idx = parentContainer.querySelectorAll('.interval-set').length;
+            const standalone = createIntervalSet(idx, ivData, parentContainer);
+            parentContainer.insertBefore(standalone, group);
+        });
+        group.remove();
+        if (setsContainer) renumberItems(setsContainer);
+    });
+
+    return group;
+}
+
+// ─── Single Interval inside a Group ───
+function createIntervalItem(index, data = null, body = null) {
+    const item = document.createElement('div');
+    item.className = 'interval-item';
+
+    const dur = data?.duration || { value: '', unit: 'km' };
+    const zone = data?.zone || 'threshold';
+    const offset = data?.offset || 0;
+    const rest = data?.rest || { value: '', unit: 'min' };
+    const restType = data?.restType || 'jog';
+
+    item.innerHTML = `
+        <div class="interval-item-header">
+            <span class="interval-item-label">Interval ${index + 1}</span>
+            ${index > 0 ? '<button type="button" class="btn-remove-interval" title="Remove">✕</button>' : ''}
+        </div>
+        <div class="interval-set-fields">
+            <div class="structured-input-group interval-duration-section">
+                <label>Distance/Time</label>
+                <div class="struct-row">
+                    <input type="number" class="struct-value" value="${dur.value || ''}" placeholder="0" step="0.1" min="0">
+                    <select class="struct-unit">
+                        <option value="km" ${dur.unit === 'km' ? 'selected' : ''}>km</option>
+                        <option value="m" ${dur.unit === 'm' ? 'selected' : ''}>m</option>
+                        <option value="min" ${dur.unit === 'min' ? 'selected' : ''}>min</option>
+                        <option value="sec" ${dur.unit === 'sec' ? 'selected' : ''}>sec</option>
+                    </select>
+                </div>
+            </div>
+            <div class="structured-input-group interval-pace-group">
+                <label>Pace</label>
+                <div class="pace-zone-row">
+                    <select class="interval-zone-select">
+                        ${PACE_ZONES.map(z => `<option value="${z.key}" ${z.key === zone ? 'selected' : ''}>${z.label}</option>`).join('')}
+                    </select>
+                    <input type="number" class="interval-offset-input" value="${offset || ''}" placeholder="±sec">
+                </div>
+            </div>
+            <div class="structured-input-group interval-rest-section">
+                <label>Rest</label>
+                <div class="struct-row">
+                    <input type="number" class="struct-value" value="${rest.value || ''}" placeholder="0" step="0.1" min="0">
+                    <select class="struct-unit">
+                        <option value="min" ${rest.unit === 'min' ? 'selected' : ''}>min</option>
+                        <option value="sec" ${rest.unit === 'sec' ? 'selected' : ''}>sec</option>
+                        <option value="m" ${rest.unit === 'm' ? 'selected' : ''}>m</option>
+                        <option value="km" ${rest.unit === 'km' ? 'selected' : ''}>km</option>
+                    </select>
+                    <select class="interval-rest-type" title="Rest type">
+                        <option value="jog" ${restType === 'jog' ? 'selected' : ''}>Jog</option>
+                        <option value="standing" ${restType === 'standing' ? 'selected' : ''}>Standing</option>
+                        <option value="float" ${restType === 'float' ? 'selected' : ''}>Float</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const removeBtn = item.querySelector('.btn-remove-interval');
     if (removeBtn) {
         removeBtn.addEventListener('click', () => {
-            const parent = set.closest('.interval-sets-container');
-            set.remove();
-            parent?.querySelectorAll('.interval-set').forEach((s, i) => {
-                s.querySelector('.interval-set-label').textContent = `Set ${i + 1}`;
-            });
+            item.remove();
+            if (body) {
+                body.querySelectorAll('.interval-item').forEach((it, i) => {
+                    const lbl = it.querySelector('.interval-item-label');
+                    if (lbl) lbl.textContent = `Interval ${i + 1}`;
+                });
+            }
         });
     }
 
-    return set;
+    return item;
 }
 
 // ─── Init ───
@@ -1265,6 +1544,17 @@ async function init() {
 
     // Load profile paces
     await loadUserProfile();
+
+    // Prompt to set paces if not configured
+    const vdot = getVDOT();
+    const banner = document.getElementById('pacesPromptBanner');
+    if (!vdot) {
+        // Switch to My Paces tab
+        document.querySelector('[data-tab="myPacesTab"]').click();
+        if (banner) banner.style.display = 'flex';
+    } else {
+        if (banner) banner.style.display = 'none';
+    }
 
     // Load plans
     await populatePlanDropdown();

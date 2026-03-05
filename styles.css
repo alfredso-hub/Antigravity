@@ -791,10 +791,198 @@ select:focus {
     background: var(--surface-tertiary) !important;
 }
 
-.add-set-btn {
-    margin: 4px 0 10px;
+/* Interval button row */
+.interval-btn-row {
+    display: flex;
+    gap: 8px;
+    margin: 6px 0 10px;
+    flex-wrap: wrap;
+}
+
+.interval-btn-row .btn {
     font-size: 0.8rem !important;
     padding: 6px 14px !important;
+}
+
+.group-selected-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* Set checkbox */
+.set-select-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.set-select-cb {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+/* ═══ Interval Groups ═══ */
+.interval-group {
+    background: var(--surface-secondary);
+    border: 1px solid var(--primary);
+    border-left: 3px solid var(--primary);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.interval-group-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+.group-label {
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.group-repeats-label {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--primary);
+}
+
+.group-repeats-input {
+    width: 45px;
+    padding: 4px 6px !important;
+    font-size: 0.85rem !important;
+    border-radius: var(--radius-sm) !important;
+    background: var(--surface-tertiary) !important;
+    color: var(--text-main) !important;
+    text-align: center;
+    font-weight: 600;
+}
+
+.group-header-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+}
+
+.btn-ungroup,
+.btn-remove-group {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 0.78rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.btn-ungroup:hover {
+    background: rgba(10, 132, 255, 0.15);
+    color: var(--primary);
+}
+
+.btn-remove-group:hover {
+    background: rgba(255, 69, 58, 0.15);
+    color: var(--accent-red);
+}
+
+.interval-group-body {
+    padding: 4px 0;
+}
+
+.interval-item {
+    background: var(--surface-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    margin-bottom: 6px;
+}
+
+.interval-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.interval-item-label {
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.btn-remove-interval {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.btn-remove-interval:hover {
+    background: rgba(255, 69, 58, 0.15);
+    color: var(--accent-red);
+}
+
+.interval-group-footer {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+}
+
+.add-interval-btn {
+    margin-top: 6px;
+    font-size: 0.78rem !important;
+    padding: 5px 12px !important;
+}
+
+/* ═══ Paces Prompt Banner ═══ */
+.paces-prompt-banner {
+    background: linear-gradient(135deg, rgba(10, 132, 255, 0.12), rgba(10, 132, 255, 0.05));
+    border: 1px solid rgba(10, 132, 255, 0.3);
+    border-radius: var(--radius-md);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.paces-prompt-banner .prompt-icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+}
+
+.paces-prompt-banner .prompt-text h3 {
+    margin: 0 0 4px;
+    font-size: 1rem;
+    color: var(--text-main);
+}
+
+.paces-prompt-banner .prompt-text p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
 }
 
 /* Week-level styles */
