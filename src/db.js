@@ -140,3 +140,143 @@ export async function saveProfile(userId, profileData) {
     }
     return { error };
 }
+
+// ─── Load admin status ───
+export async function loadAdminStatus(userId) {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', userId)
+        .single();
+
+    if (error) {
+        console.error('Error loading admin status:', error);
+        return false;
+    }
+    return data?.is_admin || false;
+}
+
+// ─── User Events (Timeline) ───
+export async function loadUserEvents(userId) {
+    const { data, error } = await supabase
+        .from('user_events')
+        .select('*')
+        .eq('user_id', userId)
+        .order('start_date', { ascending: true });
+
+    if (error) {
+        console.error('Error loading user events:', error);
+        return [];
+    }
+    return data || [];
+}
+
+export async function createUserEvent(eventData) {
+    const { data, error } = await supabase
+        .from('user_events')
+        .insert(eventData)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error creating event:', error);
+    }
+    return { data, error };
+}
+
+export async function updateUserEvent(eventId, eventData) {
+    const { data, error } = await supabase
+        .from('user_events')
+        .update(eventData)
+        .eq('id', eventId)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating event:', error);
+    }
+    return { data, error };
+}
+
+export async function deleteUserEvent(eventId) {
+    const { error } = await supabase
+        .from('user_events')
+        .delete()
+        .eq('id', eventId);
+
+    if (error) {
+        console.error('Error deleting event:', error);
+    }
+    return { error };
+}
+
+// ─── Plan Commits ───
+export async function commitToPlan(userId, planId) {
+    const { data, error } = await supabase
+        .from('user_plan_commits')
+        .upsert({
+            user_id: userId,
+            plan_id: planId,
+            committed_at: new Date().toISOString()
+        }, {
+            onConflict: 'user_id'
+        })
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error committing to plan:', error);
+    }
+    return { data, error };
+}
+
+export async function uncommitFromPlan(userId) {
+    const { error } = await supabase
+        .from('user_plan_commits')
+        .delete()
+        .eq('user_id', userId);
+
+    if (error) {
+        console.error('Error uncommitting from plan:', error);
+    }
+    return { error };
+}
+
+export async function getCommittedPlan(userId) {
+    const { data, error } = await supabase
+        .from('user_plan_commits')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+    if (error && error.code !== 'PGRST116') {
+        console.error('Error loading committed plan:', error);
+    }
+    return data;
+}
+
+// ─── Admin: Delete a plan ───
+export async function deletePlan(planId) {
+    const { error } = await supabase
+        .from('plans')
+        .delete()
+        .eq('id', planId);
+
+    if (error) {
+        console.error('Error deleting plan:', error);
+    }
+    return { error };
+}
+
+// ─── Admin: Update plan week data ───
+export async function updatePlanWeek(weekId, days) {
+    const { error } = await supabase
+        .from('plan_weeks')
+        .update({ days })
+        .eq('id', weekId);
+
+    if (error) {
+        console.error('Error updating plan week:', error);
+    }
+    return { error };
+}

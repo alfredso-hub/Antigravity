@@ -7,6 +7,8 @@
     <title>Velocity | Running Planner</title>
     <meta name="description" content="Intelligent adaptive running planner with VDOT-based pace calculations">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -39,6 +41,9 @@
                 </button>
                 <button class="tab-btn" data-tab="myPacesTab">
                     <span class="tab-icon">⏱️</span> My Paces
+                </button>
+                <button class="tab-btn" data-tab="timelineTab">
+                    <span class="tab-icon">📊</span> Timeline
                 </button>
                 <button class="tab-btn" data-tab="createPlanTab">
                     <span class="tab-icon">✨</span> Create Plan
@@ -142,9 +147,12 @@
                     <div class="controls-grid">
                         <div class="input-group">
                             <label for="planSelect">Select Plan</label>
-                            <select id="planSelect">
-                                <!-- Populated dynamically -->
-                            </select>
+                            <div class="plan-select-row">
+                                <select id="planSelect">
+                                    <!-- Populated dynamically -->
+                                </select>
+                                <div id="adminPlanActions" class="admin-plan-actions" style="display:none;"></div>
+                            </div>
                         </div>
 
                         <div class="input-group">
@@ -159,6 +167,11 @@
                             <label for="raceDate">Race Date</label>
                             <input type="date" id="raceDate" value="2026-05-10">
                         </div>
+
+                        <div class="input-group commit-group">
+                            <label>Plan Status</label>
+                            <div id="commitBtnContainer"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -171,6 +184,93 @@
                 <div id="planContainer" class="weeks-container">
                     <!-- Weeks injected here -->
                 </div>
+            </div>
+
+            <!-- ═══ TIMELINE TAB ═══ -->
+            <div id="timelineTab" class="tab-content">
+                <div class="card controls-section">
+                    <h2 class="section-title">Race Timeline</h2>
+                    <p style="color:var(--text-secondary);margin-bottom:20px;">Track your race results, sickness, and injury periods over time.</p>
+
+                    <div class="controls-grid" style="margin-bottom:20px;">
+                        <div class="input-group">
+                            <label for="timelineDistanceFilter">Filter Distance</label>
+                            <select id="timelineDistanceFilter">
+                                <option value="all">All Distances</option>
+                                <optgroup label="Road">
+                                    <option value="5k">5k</option>
+                                    <option value="10k">10k</option>
+                                    <option value="half">Half Marathon</option>
+                                    <option value="marathon">Marathon</option>
+                                </optgroup>
+                                <optgroup label="Track">
+                                    <option value="3000m">3000m</option>
+                                    <option value="5000m">5000m</option>
+                                    <option value="10000m">10000m</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="timeline-chart-container">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Event Form -->
+                <div class="card" style="margin-top:20px;">
+                    <h3 class="section-title" style="font-size:1.1rem;">Log Event</h3>
+                    <form id="eventForm" class="event-form">
+                        <div class="controls-grid">
+                            <div class="input-group">
+                                <label for="eventType">Event Type</label>
+                                <select id="eventType">
+                                    <option value="race">Race</option>
+                                    <option value="sickness">Sickness</option>
+                                    <option value="injury">Injury</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="eventStartDate">Date</label>
+                                <input type="date" id="eventStartDate" required>
+                            </div>
+                            <div class="input-group event-end-date-group" style="display:none;">
+                                <label for="eventEndDate">End Date</label>
+                                <input type="date" id="eventEndDate">
+                            </div>
+                            <div class="input-group event-distance-group">
+                                <label for="eventDistance">Distance</label>
+                                <select id="eventDistance">
+                                    <optgroup label="Road">
+                                        <option value="5k">5k</option>
+                                        <option value="10k">10k</option>
+                                        <option value="half">Half Marathon</option>
+                                        <option value="marathon">Marathon</option>
+                                    </optgroup>
+                                    <optgroup label="Track">
+                                        <option value="3000m">3000m</option>
+                                        <option value="5000m">5000m</option>
+                                        <option value="10000m">10000m</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="input-group event-time-group">
+                                <label for="eventTime">Time</label>
+                                <input type="text" id="eventTime" placeholder="e.g. 3:05:22 or 14:32.50">
+                            </div>
+                            <div class="input-group">
+                                <label for="eventNotes">Notes</label>
+                                <input type="text" id="eventNotes" placeholder="e.g. Copenhagen Marathon">
+                            </div>
+                        </div>
+                        <div style="margin-top:16px;">
+                            <button type="submit" class="btn btn-primary">Add Event</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Events List -->
+                <div id="eventsListContainer" class="events-list" style="margin-top:20px;"></div>
             </div>
 
             <!-- ═══ CREATE PLAN TAB ═══ -->

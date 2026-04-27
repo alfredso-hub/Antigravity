@@ -5,7 +5,10 @@ import {
 } from './paces.js';
 import {
     loadPlans, loadPlanWeeks, loadUserCustomizations,
-    saveUserCustomization, createPlan, loadProfile, saveProfile
+    saveUserCustomization, createPlan, loadProfile, saveProfile,
+    loadAdminStatus, loadUserEvents, createUserEvent, updateUserEvent,
+    deleteUserEvent, commitToPlan, uncommitFromPlan, getCommittedPlan,
+    deletePlan, updatePlanWeek
 } from './db.js';
 
 // ─── State ───
@@ -14,6 +17,11 @@ let allPlans = [];
 let currentPlanWeeks = [];
 let currentCustomizations = {};
 let myChart = null;
+let isAdmin = false;
+let adminModeEnabled = false;
+let allUserEvents = [];
+let timelineChart = null;
+let committedPlanId = null;
 
 // ─── Auth UI ───
 function renderAuthUI(user) {
@@ -27,6 +35,7 @@ function renderAuthUI(user) {
                 ${avatar ? `<img src="${avatar}" alt="" class="user-avatar">` : ''}
                 <span class="user-name">${name}</span>
                 <button id="signOutBtn" class="btn btn-secondary btn-sm">Sign Out</button>
+                <div id="adminToggleArea"></div>
             </div>
         `;
         document.getElementById('signOutBtn').addEventListener('click', async () => {
@@ -41,6 +50,59 @@ function renderAuthUI(user) {
             </button>
         `;
         document.getElementById('googleSignIn').addEventListener('click', () => signInWithGoogle());
+    }
+}
+
+function renderAdminToggle() {
+    const area = document.getElementById('adminToggleArea');
+    if (!area) return;
+    if (!isAdmin) {
+        area.innerHTML = '';
+        return;
+    }
+    area.innerHTML = `
+        <div class="admin-toggle-container">
+            <span class="admin-toggle-label">Admin</span>
+            <label class="admin-toggle">
+                <input type="checkbox" id="adminModeCheckbox" ${adminModeEnabled ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+    `;
+    document.getElementById('adminModeCheckbox').addEventListener('change', (e) => {
+        adminModeEnabled = e.target.checked;
+        updateAdminUI();
+    });
+}
+
+function updateAdminUI() {
+    const adminActions = document.getElementById('adminPlanActions');
+    if (adminActions) {
+        if (adminModeEnabled) {
+            adminActions.style.display = 'flex';
+            adminActions.innerHTML = `
+                <button class="btn btn-sm btn-danger" id="adminDeletePlanBtn" title="Delete this plan">🗑️</button>
+            `;
+            document.getElementById('adminDeletePlanBtn').addEventListener('click', handleDeletePlan);
+        } else {
+            adminActions.style.display = 'none';
+            adminActions.innerHTML = '';
+        }
+    }
+}
+
+async function handleDeletePlan() {
+    const planId = document.getElementById('planSelect').value;
+    if (!planId) return;
+    const planName = document.getElementById('planSelect').selectedOptions[0]?.textContent || 'this plan';
+    if (!confirm(`Are you sure you want to delete "${planName}"? This action cannot be undone.`)) return;
+
+    const { error } = await deletePlan(planId);
+    if (error) {
+        alert('Failed to delete plan: ' + (error.message || 'Unknown error'));
+    } else {
+        await populatePlanDropdown();
+        populateBasePlanDropdown();
     }
 }
 
@@ -221,6 +283,10 @@ function renderChart(weeks, unit) {
     Chart.defaults.color = '#98989D';
     Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
 
+    // Get health overlays
+    const raceDate = new Date(document.getElementById('raceDate').value);
+    const healthAnnotations = getHealthOverlaysForPlanChart(weeks, raceDate);
+
     myChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -263,6 +329,9 @@ function renderChart(weeks, unit) {
                     titleColor: '#F5F5F7', bodyColor: '#F5F5F7',
                     titleFont: { size: 13 }, bodyFont: { size: 12 },
                     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
+                },
+                annotation: {
+                    annotations: healthAnnotations
                 }
             },
             scales: {
@@ -1528,11 +1597,459 @@ function createIntervalItem(index, data = null, body = null) {
     return item;
 }
 
+// ─── Commit to Plan ───
+async function renderCommitButton() {
+    const container = document.getElementById('commitBtnContainer');
+    if (!container || !currentUser) return;
+
+    const commit = await getCommittedPlan(currentUser.id);
+    committedPlanId = commit?.plan_id || null;
+    const currentPlanId = document.getElementById('planSelect').value;
+    const isCommitted = committedPlanId === currentPlanId;
+
+    if (isCommitted) {
+        container.innerHTML = `
+            <button class="btn-uncommit" id="uncommitBtn">
+                <span>✓</span> Committed — Uncommit
+            </button>
+        `;
+        document.getElementById('uncommitBtn').addEventListener('click', async () => {
+            const { error } = await uncommitFromPlan(currentUser.id);
+            if (!error) {
+                committedPlanId = null;
+                renderCommitButton();
+            }
+        });
+    } else {
+        container.innerHTML = `
+            <button class="btn-commit" id="commitBtn">Commit to Plan</button>
+        `;
+        document.getElementById('commitBtn').addEventListener('click', async () => {
+            const planId = document.getElementById('planSelect').value;
+            if (!planId) return;
+            const { error } = await commitToPlan(currentUser.id, planId);
+            if (!error) {
+                committedPlanId = planId;
+                renderCommitButton();
+            }
+        });
+    }
+}
+
+// ─── Timeline ───
+const TRACK_DISTANCES = ['3000m', '5000m', '10000m'];
+const ROAD_DISTANCES = ['5k', '10k', 'half', 'marathon'];
+const ALL_DISTANCES = [...ROAD_DISTANCES, ...TRACK_DISTANCES];
+
+function isTrackDistance(distance) {
+    return TRACK_DISTANCES.includes(distance);
+}
+
+function getDistanceLabelForEvent(distance) {
+    const labels = {
+        '3000m': '3000m', '5000m': '5000m', '10000m': '10000m',
+        '5k': '5k', '10k': '10k', 'half': 'Half Marathon', 'marathon': 'Marathon'
+    };
+    return labels[distance] || distance;
+}
+
+// Parse race time string to total seconds (supports hh:mm:ss, mm:ss, mm:ss.xx)
+function parseRaceTime(str) {
+    if (!str || str.trim() === '') return 0;
+    // Handle mm:ss.xx format (track)
+    if (str.includes('.')) {
+        const [main, frac] = str.split('.');
+        const parts = main.split(':');
+        let sec = 0;
+        if (parts.length === 2) {
+            sec = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        } else if (parts.length === 1) {
+            sec = parseInt(parts[0]);
+        }
+        return sec + (parseInt(frac || 0) / 100);
+    }
+    // Standard mm:ss or hh:mm:ss
+    const parts = str.split(':');
+    if (parts.length === 2) return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+    return 0;
+}
+
+// Format seconds to display string based on distance type
+function formatRaceTimeDisplay(seconds, distance) {
+    if (!seconds || seconds <= 0) return '--';
+    if (isTrackDistance(distance)) {
+        // Track: mm:ss.00
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        const wholeSecs = Math.floor(secs);
+        const hundredths = Math.round((secs - wholeSecs) * 100);
+        return `${mins}:${wholeSecs.toString().padStart(2, '0')}.${hundredths.toString().padStart(2, '0')}`;
+    } else {
+        // Road: hh:mm:ss or mm:ss
+        const totalSec = Math.round(seconds);
+        const hours = Math.floor(totalSec / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        const secs = totalSec % 60;
+        if (hours > 0) {
+            return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+}
+
+async function loadAndRenderTimeline() {
+    if (!currentUser) return;
+    allUserEvents = await loadUserEvents(currentUser.id);
+    renderTimelineChart();
+    renderEventsList();
+}
+
+function renderTimelineChart() {
+    const ctx = document.getElementById('timelineChart');
+    if (!ctx) return;
+    const filter = document.getElementById('timelineDistanceFilter').value;
+
+    // Filter race events
+    let raceEvents = allUserEvents.filter(e => e.event_type === 'race');
+    if (filter !== 'all') {
+        raceEvents = raceEvents.filter(e => e.distance === filter);
+    }
+
+    // Health events (sickness + injury)
+    const healthEvents = allUserEvents.filter(e => e.event_type === 'sickness' || e.event_type === 'injury');
+
+    // Determine if we're showing a single distance or mixed
+    const distances = [...new Set(raceEvents.map(e => e.distance))];
+    const singleDistance = filter !== 'all' ? filter : (distances.length === 1 ? distances[0] : null);
+    const isTrack = singleDistance ? isTrackDistance(singleDistance) : false;
+
+    // Convert race events to chart data
+    const raceData = raceEvents.map(e => ({
+        x: e.start_date,
+        y: parseRaceTime(e.time),
+        distance: e.distance,
+        notes: e.notes,
+        time: e.time
+    })).filter(d => d.y > 0);
+
+    // Build annotation overlays for health events
+    const annotations = {};
+    healthEvents.forEach((event, idx) => {
+        if (!event.start_date) return;
+        const color = event.event_type === 'sickness'
+            ? 'rgba(255, 159, 10, 0.12)'
+            : 'rgba(255, 69, 58, 0.12)';
+        const borderColor = event.event_type === 'sickness'
+            ? 'rgba(255, 159, 10, 0.4)'
+            : 'rgba(255, 69, 58, 0.4)';
+        annotations[`health_${idx}`] = {
+            type: 'box',
+            xMin: event.start_date,
+            xMax: event.end_date || event.start_date,
+            backgroundColor: color,
+            borderColor: borderColor,
+            borderWidth: 1,
+            label: {
+                display: true,
+                content: `${event.event_type === 'sickness' ? '🤒' : '🩹'} ${event.notes || event.event_type}`,
+                position: 'start',
+                font: { size: 10 },
+                color: event.event_type === 'sickness' ? '#FF9F0A' : '#FF453A'
+            }
+        };
+    });
+
+    // Group data by distance for coloring
+    const distanceColors = {
+        '3000m': '#FF453A', '5000m': '#FF9F0A', '10000m': '#FFD60A',
+        '5k': '#30D158', '10k': '#0A84FF', 'half': '#BF5AF2', 'marathon': '#FF375F'
+    };
+
+    // Create datasets — one per distance if "all", or one if filtered
+    let datasets = [];
+    if (filter === 'all' && distances.length > 1) {
+        distances.forEach(dist => {
+            const points = raceData.filter(d => d.distance === dist);
+            datasets.push({
+                label: getDistanceLabelForEvent(dist),
+                data: points,
+                borderColor: distanceColors[dist] || '#F5F5F7',
+                backgroundColor: distanceColors[dist] || '#F5F5F7',
+                pointRadius: 6,
+                pointHoverRadius: 9,
+                showLine: false,
+                pointStyle: 'circle'
+            });
+        });
+    } else {
+        datasets.push({
+            label: singleDistance ? getDistanceLabelForEvent(singleDistance) : 'Race Results',
+            data: raceData,
+            borderColor: singleDistance ? (distanceColors[singleDistance] || '#0A84FF') : '#0A84FF',
+            backgroundColor: singleDistance ? (distanceColors[singleDistance] || '#0A84FF') : '#0A84FF',
+            pointRadius: 6,
+            pointHoverRadius: 9,
+            showLine: raceData.length > 1,
+            borderWidth: 2,
+            tension: 0.3,
+            pointBackgroundColor: '#1C1C1E'
+        });
+    }
+
+    if (timelineChart) timelineChart.destroy();
+
+    Chart.defaults.color = '#98989D';
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
+
+    timelineChart = new Chart(ctx, {
+        type: 'scatter',
+        data: { datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: true },
+            plugins: {
+                legend: {
+                    display: datasets.length > 1,
+                    position: 'top',
+                    labels: { color: '#98989D' }
+                },
+                tooltip: {
+                    padding: 10,
+                    backgroundColor: 'rgba(44,44,46,0.95)',
+                    titleColor: '#F5F5F7',
+                    bodyColor: '#F5F5F7',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    callbacks: {
+                        title: (items) => {
+                            if (!items.length) return '';
+                            const raw = items[0].raw;
+                            const d = new Date(raw.x);
+                            return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                        },
+                        label: (item) => {
+                            const raw = item.raw;
+                            const dist = raw.distance || singleDistance;
+                            const timeStr = formatRaceTimeDisplay(raw.y, dist);
+                            const label = raw.notes ? `${raw.notes}: ${timeStr}` : `${getDistanceLabelForEvent(dist)}: ${timeStr}`;
+                            return label;
+                        }
+                    }
+                },
+                annotation: {
+                    annotations
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'month',
+                        displayFormats: { month: 'MMM yyyy', day: 'dd MMM' }
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#636366' },
+                    title: { display: true, text: 'Date', color: '#636366' }
+                },
+                y: {
+                    reverse: true, // Lower time = better = higher on chart
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    title: {
+                        display: true,
+                        text: 'Race Time',
+                        color: '#636366'
+                    },
+                    ticks: {
+                        color: '#636366',
+                        callback: function(value) {
+                            return formatRaceTimeDisplay(value, singleDistance || '5k');
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function setupEventForm() {
+    const form = document.getElementById('eventForm');
+    const typeSelect = document.getElementById('eventType');
+    if (!form || !typeSelect) return;
+
+    // Toggle fields based on event type
+    typeSelect.addEventListener('change', () => {
+        const type = typeSelect.value;
+        const endDateGroup = document.querySelector('.event-end-date-group');
+        const distanceGroup = document.querySelector('.event-distance-group');
+        const timeGroup = document.querySelector('.event-time-group');
+
+        if (type === 'race') {
+            endDateGroup.style.display = 'none';
+            distanceGroup.style.display = 'flex';
+            timeGroup.style.display = 'flex';
+        } else {
+            endDateGroup.style.display = 'flex';
+            distanceGroup.style.display = 'none';
+            timeGroup.style.display = 'none';
+        }
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!currentUser) return;
+
+        const type = typeSelect.value;
+        const eventData = {
+            user_id: currentUser.id,
+            event_type: type,
+            start_date: document.getElementById('eventStartDate').value,
+            notes: document.getElementById('eventNotes').value || null
+        };
+
+        if (type === 'race') {
+            eventData.distance = document.getElementById('eventDistance').value;
+            eventData.time = document.getElementById('eventTime').value;
+        } else {
+            eventData.end_date = document.getElementById('eventEndDate').value || null;
+        }
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving...';
+
+        const { error } = await createUserEvent(eventData);
+        if (error) {
+            submitBtn.textContent = 'Error!';
+            setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 2000);
+        } else {
+            submitBtn.textContent = '✓ Added!';
+            form.reset();
+            // Reset event type to race to reset form field visibility
+            typeSelect.value = 'race';
+            typeSelect.dispatchEvent(new Event('change'));
+            setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 1500);
+            await loadAndRenderTimeline();
+        }
+    });
+}
+
+function renderEventsList() {
+    const container = document.getElementById('eventsListContainer');
+    if (!container) return;
+
+    if (allUserEvents.length === 0) {
+        container.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--text-secondary)">No events logged yet. Use the form above to add your first race or health event.</div>';
+        return;
+    }
+
+    // Sort newest first for the list
+    const sorted = [...allUserEvents].sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+
+    container.innerHTML = sorted.map(event => {
+        const dateStr = new Date(event.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        let dateRange = dateStr;
+        if (event.end_date && event.end_date !== event.start_date) {
+            const endStr = new Date(event.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            dateRange = `${dateStr} — ${endStr}`;
+        }
+
+        const title = event.notes || (event.event_type === 'race'
+            ? getDistanceLabelForEvent(event.distance)
+            : event.event_type.charAt(0).toUpperCase() + event.event_type.slice(1));
+
+        const timeDisplay = event.event_type === 'race' && event.time
+            ? `<span class="event-result">${formatRaceTimeDisplay(parseRaceTime(event.time), event.distance)}</span>`
+            : '';
+
+        return `
+            <div class="event-card" data-event-id="${event.id}">
+                <span class="event-type-badge ${event.event_type}">${event.event_type}</span>
+                <div class="event-info">
+                    <div class="event-title">${escapeHtml(title)}${event.event_type === 'race' ? ` <span style="color:var(--text-tertiary);font-size:0.8rem">(${getDistanceLabelForEvent(event.distance)})</span>` : ''}</div>
+                    <div class="event-date">${dateRange}</div>
+                </div>
+                ${timeDisplay}
+                <div class="event-actions">
+                    <button class="btn btn-sm btn-danger event-delete-btn" data-id="${event.id}" title="Delete">✕</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Wire delete buttons
+    container.querySelectorAll('.event-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!confirm('Delete this event?')) return;
+            const eventId = btn.dataset.id;
+            const { error } = await deleteUserEvent(eventId);
+            if (!error) {
+                await loadAndRenderTimeline();
+            }
+        });
+    });
+}
+
+// ─── Plan Chart Overlays ───
+function getHealthOverlaysForPlanChart(weeks, raceDate) {
+    if (!allUserEvents || allUserEvents.length === 0) return {};
+    const healthEvents = allUserEvents.filter(e => e.event_type === 'sickness' || e.event_type === 'injury');
+    if (healthEvents.length === 0) return {};
+
+    const totalWeeks = weeks.length;
+    const annotations = {};
+
+    healthEvents.forEach((event, idx) => {
+        if (!event.start_date) return;
+        const eventStart = new Date(event.start_date);
+        const eventEnd = event.end_date ? new Date(event.end_date) : eventStart;
+        const planStart = new Date(raceDate);
+        planStart.setDate(planStart.getDate() - (totalWeeks * 7));
+
+        // Convert dates to week index positions
+        const startWeekFloat = (eventStart - planStart) / (7 * 24 * 60 * 60 * 1000);
+        const endWeekFloat = (eventEnd - planStart) / (7 * 24 * 60 * 60 * 1000);
+
+        // Only include if overlapping with plan range
+        if (endWeekFloat < 0 || startWeekFloat > totalWeeks) return;
+
+        const xMin = Math.max(startWeekFloat - 0.5, -0.5);
+        const xMax = Math.min(endWeekFloat - 0.5, totalWeeks - 0.5);
+
+        const color = event.event_type === 'sickness'
+            ? 'rgba(255, 159, 10, 0.1)'
+            : 'rgba(255, 69, 58, 0.1)';
+        const borderColor = event.event_type === 'sickness'
+            ? 'rgba(255, 159, 10, 0.35)'
+            : 'rgba(255, 69, 58, 0.35)';
+
+        annotations[`plan_health_${idx}`] = {
+            type: 'box',
+            xMin,
+            xMax,
+            backgroundColor: color,
+            borderColor: borderColor,
+            borderWidth: 1,
+            label: {
+                display: true,
+                content: `${event.event_type === 'sickness' ? '🤒' : '🩹'} ${event.notes || event.event_type}`,
+                position: 'start',
+                font: { size: 9 },
+                color: event.event_type === 'sickness' ? '#FF9F0A' : '#FF453A'
+            }
+        };
+    });
+
+    return annotations;
+}
+
 // ─── Init ───
 async function init() {
     // Setup tabs
     setupTabs();
     setupCreatePlan();
+    setupEventForm();
 
     // Check auth
     const session = await getSession();
@@ -1541,6 +2058,10 @@ async function init() {
     showApp(!!currentUser);
 
     if (!currentUser) return;
+
+    // Load admin status
+    isAdmin = await loadAdminStatus(currentUser.id);
+    renderAdminToggle();
 
     // Load profile paces
     await loadUserProfile();
@@ -1559,6 +2080,12 @@ async function init() {
     // Load plans
     await populatePlanDropdown();
 
+    // Load events for timeline + chart overlays
+    allUserEvents = await loadUserEvents(currentUser.id);
+
+    // Render commit button
+    await renderCommitButton();
+
     // Event listeners
     document.getElementById('tuningMode').addEventListener('change', () => {
         updateTuningSection();
@@ -1568,9 +2095,17 @@ async function init() {
     document.getElementById('planSelect').addEventListener('change', async () => {
         updateGoalRaceLabel();
         await loadAndRenderPlan();
+        renderCommitButton();
+        if (adminModeEnabled) updateAdminUI();
     });
 
     document.getElementById('savePacesBtn').addEventListener('click', handleSavePaces);
+
+    // Timeline distance filter
+    const distFilter = document.getElementById('timelineDistanceFilter');
+    if (distFilter) {
+        distFilter.addEventListener('change', () => renderTimelineChart());
+    }
 
     const inputs = ['raceDistance', 'raceTime', 'units', 'raceDate', 'pb5k', 'pb10k', 'pbHalf', 'pbMarathon', 'goalTime'];
     inputs.forEach(id => {
@@ -1603,10 +2138,29 @@ async function init() {
                 });
             }
 
+            // Load admin status for new sign-in
+            isAdmin = await loadAdminStatus(currentUser.id);
+            renderAdminToggle();
+
             await loadUserProfile();
             await populatePlanDropdown();
+            allUserEvents = await loadUserEvents(currentUser.id);
+            await renderCommitButton();
         }
     });
+
+    // Lazy-load timeline when tab is first opened
+    const timelineTabBtn = document.querySelector('[data-tab="timelineTab"]');
+    let timelineLoaded = false;
+    if (timelineTabBtn) {
+        timelineTabBtn.addEventListener('click', () => {
+            if (!timelineLoaded) {
+                timelineLoaded = true;
+                renderTimelineChart();
+                renderEventsList();
+            }
+        });
+    }
 
     // Add one default week to create plan form
     const container = document.getElementById('weekInputsContainer');
