@@ -8,6 +8,9 @@ import {
     saveUserCustomization, createPlan, loadProfile, saveProfile,
     loadAdminStatus, loadUserEvents, createUserEvent, updateUserEvent,
     deleteUserEvent, commitToPlan, uncommitFromPlan, getCommittedPlan,
+    loadUserWorkouts, updateUserWorkout, createPlanAdjustment, wipeSandboxData
+} from './db.js';
+import { runAdjustmentEngine } from './engine/adjustment.js';
     deletePlan, updatePlanWeek
 } from './db.js';
 
@@ -22,6 +25,11 @@ let adminModeEnabled = false;
 let allUserEvents = [];
 let timelineChart = null;
 let committedPlanId = null;
+
+// Sandbox Mode State
+let isSandboxMode = false;
+let realCurrentUser = null;
+const SANDBOX_USER_ID = '99999999-9999-9999-9999-999999999999';
 
 // ─── Auth UI ───
 function renderAuthUI(user) {
@@ -82,11 +90,79 @@ function updateAdminUI() {
             adminActions.style.display = 'flex';
             adminActions.innerHTML = `
                 <button class="btn btn-sm btn-danger" id="adminDeletePlanBtn" title="Delete this plan">🗑️</button>
+                <div class="sandbox-toggle-container" style="margin-left: 10px; display: flex; align-items: center; gap: 5px;">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary);">Sandbox</span>
+                    <label class="admin-toggle">
+                        <input type="checkbox" id="sandboxModeCheckbox" ${isSandboxMode ? 'checked' : ''}>
+                        <span class="toggle-slider" style="background-color: var(--secondary-color);"></span>
+                    </label>
+                </div>
             `;
             document.getElementById('adminDeletePlanBtn').addEventListener('click', handleDeletePlan);
+            document.getElementById('sandboxModeCheckbox').addEventListener('change', async (e) => {
+                isSandboxMode = e.target.checked;
+                await toggleSandboxMode(isSandboxMode);
+            });
         } else {
             adminActions.style.display = 'none';
             adminActions.innerHTML = '';
+        }
+    }
+}
+
+async function toggleSandboxMode(enabled) {
+    if (enabled) {
+        if (!realCurrentUser) realCurrentUser = currentUser;
+        currentUser = { ...realCurrentUser, id: SANDBOX_USER_ID, email: 'sandbox@velocity.app' };
+    } else {
+        if (realCurrentUser) {
+            currentUser = realCurrentUser;
+            realCurrentUser = null;
+        }
+    }
+    
+    // Update Banner
+    let banner = document.getElementById('sandboxBanner');
+    if (enabled) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'sandboxBanner';
+            banner.style.cssText = 'position: sticky; top: 0; background: #FF9F0A; color: #000; text-align: center; padding: 5px; font-weight: bold; z-index: 1000; display: flex; justify-content: center; gap: 15px; align-items: center;';
+            banner.innerHTML = `
+                <span>SANDBOX MODE ACTIVE</span>
+                <button id="wipeSandboxBtn" style="background: transparent; border: 1px solid #000; color: #000; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Wipe Data</button>
+            `;
+            document.body.prepend(banner);
+            
+            document.getElementById('wipeSandboxBtn').addEventListener('click', async () => {
+                if(confirm('Wipe all sandbox data?')) {
+                    await wipeSandboxData(SANDBOX_USER_ID);
+                    alert('Sandbox wiped!');
+                    await loadAndRenderTimeline();
+                    renderCommitButton();
+                    const commit = await getCommittedPlan(currentUser.id);
+                    if(commit) renderUserSchedule(commit.id);
+                    else { const mc = document.querySelector('.main-content'); if(mc && mc.querySelector('.schedule-list')) location.reload(); }
+                }
+            });
+        }
+    } else {
+        if (banner) banner.remove();
+    }
+
+    // Reload UI state with new user ID
+    await loadAndRenderTimeline();
+    renderCommitButton();
+    const commit = await getCommittedPlan(currentUser.id);
+    if (commit) {
+        // If we were on schedule view, re-render it
+        if (document.querySelector('.schedule-list')) {
+            renderUserSchedule(commit.id);
+        }
+    } else {
+        // If we were on schedule view but now have no commit, go back to plan view
+        if (document.querySelector('.schedule-list')) {
+            location.reload();
         }
     }
 }
@@ -1612,6 +1688,9 @@ async function renderCommitButton() {
             <button class="btn-uncommit" id="uncommitBtn">
                 <span>✓</span> Committed — Uncommit
             </button>
+            <div style="margin-top: 10px; text-align: center;">
+                <button class="btn btn-sm btn-secondary" id="viewScheduleBtn">View My Schedule</button>
+            </div>
         `;
         document.getElementById('uncommitBtn').addEventListener('click', async () => {
             const { error } = await uncommitFromPlan(currentUser.id);
@@ -1620,20 +1699,228 @@ async function renderCommitButton() {
                 renderCommitButton();
             }
         });
+        document.getElementById('viewScheduleBtn').addEventListener('click', () => {
+            // Trigger a view change to the user schedule (will implement below)
+            renderUserSchedule(commit.id);
+        });
     } else {
         container.innerHTML = `
+            <div class="commit-date-picker" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center; justify-content: center;">
+                <select id="commitDateType" class="form-select" style="width: auto;">
+                    <option value="start">Plan Start Date</option>
+                    <option value="race">Target Race Date</option>
+                </select>
+                <input type="date" id="commitDateValue" class="form-control" style="width: auto;">
+            </div>
             <button class="btn-commit" id="commitBtn">Commit to Plan</button>
         `;
+        
+        // Default to today or next Monday for start date
+        const dateInput = document.getElementById('commitDateValue');
+        const today = new Date();
+        const nextMonday = new Date(today);
+        nextMonday.setDate(today.getDate() + ((1 + 7 - today.getDay()) % 7 || 7));
+        dateInput.value = nextMonday.toISOString().split('T')[0];
+
         document.getElementById('commitBtn').addEventListener('click', async () => {
             const planId = document.getElementById('planSelect').value;
-            if (!planId) return;
-            const { error } = await commitToPlan(currentUser.id, planId);
+            const dateType = document.getElementById('commitDateType').value;
+            const dateValue = document.getElementById('commitDateValue').value;
+
+            if (!planId || !dateValue) {
+                alert('Please select a plan and a date.');
+                return;
+            }
+
+            // Generate workouts based on currentPlanWeeks
+            if (!currentPlanWeeks || currentPlanWeeks.length === 0) {
+                alert('Wait for plan weeks to load.');
+                return;
+            }
+
+            const totalWeeks = currentPlanWeeks.length;
+            let startDate = new Date(dateValue);
+            if (dateType === 'race') {
+                // Assuming race is on the last day (Sunday) of the last week.
+                // Subtract (totalWeeks * 7) - 1 days
+                startDate.setDate(startDate.getDate() - ((totalWeeks * 7) - 1));
+            }
+
+            const generatedWorkouts = [];
+            let currentDay = new Date(startDate);
+
+            // Reorder based on user customizations if any exist in currentPlanWeeks
+            for (const week of currentPlanWeeks) {
+                const weekNum = week.week_number;
+                const days = week.days; // array of 7 days
+                // If we loaded customizations, we should apply them here. 
+                // For simplicity, assuming days array is in order Mon-Sun.
+                
+                for (let i = 0; i < 7; i++) {
+                    const dayData = days[i];
+                    generatedWorkouts.push({
+                        scheduled_date: currentDay.toISOString().split('T')[0],
+                        workout_type: dayData.type,
+                        planned_data: dayData
+                    });
+                    // increment day
+                    currentDay.setDate(currentDay.getDate() + 1);
+                }
+            }
+
+            const btn = document.getElementById('commitBtn');
+            btn.disabled = true;
+            btn.textContent = 'Committing...';
+
+            const { error } = await commitToPlan(currentUser.id, planId, generatedWorkouts);
             if (!error) {
                 committedPlanId = planId;
                 renderCommitButton();
+            } else {
+                alert('Error committing to plan.');
+                btn.disabled = false;
+                btn.textContent = 'Commit to Plan';
             }
         });
     }
+}
+
+// ─── User Schedule & Tick Off ───
+async function renderUserSchedule(commitId) {
+    const mainContainer = document.querySelector('.main-content');
+    if (!mainContainer || !currentUser) return;
+
+    const workouts = await loadUserWorkouts(currentUser.id, commitId);
+    
+    // Create view
+    let html = `
+        <div class="content-header" style="margin-bottom: 20px;">
+            <h2 class="content-title">My Schedule</h2>
+            <button class="btn btn-secondary" onclick="location.reload()">Back to Plan</button>
+        </div>
+        <div class="schedule-list" style="display: flex; flex-direction: column; gap: 10px;">
+    `;
+
+    if (workouts.length === 0) {
+        html += `<p>No workouts found for this plan.</p>`;
+    } else {
+        // Group by week (just roughly by every 7 days)
+        let currentWeek = 0;
+        workouts.forEach((w, i) => {
+            if (i % 7 === 0) {
+                currentWeek++;
+                html += `<h3 style="margin-top: 20px; color: var(--text-primary);">Week ${currentWeek}</h3>`;
+            }
+            
+            const dateStr = new Date(w.scheduled_date).toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' });
+            const isCompleted = w.status === 'COMPLETED';
+            const isSkipped = w.status === 'SKIPPED';
+            
+            let statusBadge = '';
+            if (isCompleted) statusBadge = `<span style="color: #30D158; font-size: 0.8rem; margin-left: auto;">✓ COMPLETED</span>`;
+            if (isSkipped) statusBadge = `<span style="color: #FF453A; font-size: 0.8rem; margin-left: auto;">✕ SKIPPED</span>`;
+
+            html += `
+                <div class="card" style="padding: 15px; display: flex; align-items: center; cursor: pointer; opacity: ${isCompleted || isSkipped ? 0.6 : 1}" onclick="openTickOffModal('${w.id}')">
+                    <div style="width: 100px; color: var(--text-secondary); font-size: 0.9rem;">${dateStr}</div>
+                    <div style="width: 80px;"><span class="pace-badge ${w.planned_data.class || 'easy'}">${w.workout_type}</span></div>
+                    <div style="flex: 1; padding: 0 15px;">${escapeHtml(w.planned_data.desc || '')}</div>
+                    ${statusBadge}
+                    ${!isCompleted && !isSkipped ? '<button class="btn btn-sm btn-primary">Tick Off</button>' : ''}
+                </div>
+            `;
+        });
+    }
+
+    html += `</div>`;
+    mainContainer.innerHTML = html;
+
+    // We need to attach the modal html if it doesn't exist
+    if (!document.getElementById('tickOffModal')) {
+        const modalHtml = `
+            <div class="modal" id="tickOffModal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Tick Off Session</h3>
+                        <button class="close-modal" id="closeTickOffModal">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="tickOffWorkoutId">
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select id="tickOffStatus" class="form-select">
+                                <option value="COMPLETED">Completed</option>
+                                <option value="SKIPPED">Skipped</option>
+                            </select>
+                        </div>
+                        <div id="tickOffDetails" style="display: block;">
+                            <div class="form-group">
+                                <label>Actual Distance (km)</label>
+                                <input type="number" id="tickOffDistance" class="form-control" step="0.1" min="0" placeholder="e.g. 10.5">
+                            </div>
+                            <div class="form-group">
+                                <label>Actual Time</label>
+                                <input type="text" id="tickOffTime" class="form-control" placeholder="hh:mm:ss or mm:ss">
+                            </div>
+                            <div class="form-group">
+                                <label>Notes</label>
+                                <textarea id="tickOffNotes" class="form-control" rows="3" placeholder="How did it feel? Any deviations?"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-primary" id="saveTickOffBtn">Save</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        document.getElementById('closeTickOffModal').addEventListener('click', () => {
+            document.getElementById('tickOffModal').classList.remove('active');
+        });
+
+        document.getElementById('tickOffStatus').addEventListener('change', (e) => {
+            document.getElementById('tickOffDetails').style.display = e.target.value === 'COMPLETED' ? 'block' : 'none';
+        });
+
+        document.getElementById('saveTickOffBtn').addEventListener('click', async () => {
+            const wId = document.getElementById('tickOffWorkoutId').value;
+            const status = document.getElementById('tickOffStatus').value;
+            const actualData = {};
+            if (status === 'COMPLETED') {
+                actualData.distance = document.getElementById('tickOffDistance').value;
+                actualData.time = document.getElementById('tickOffTime').value;
+                actualData.notes = document.getElementById('tickOffNotes').value;
+            }
+
+            const btn = document.getElementById('saveTickOffBtn');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            const { error } = await updateUserWorkout(wId, { status, actual_data: actualData });
+            if (!error) {
+                document.getElementById('tickOffModal').classList.remove('active');
+                renderUserSchedule(commitId); // refresh
+            } else {
+                alert('Error saving workout status.');
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Save';
+        });
+    }
+
+    // Expose open function globally so inline onclick works
+    window.openTickOffModal = (workoutId) => {
+        document.getElementById('tickOffWorkoutId').value = workoutId;
+        document.getElementById('tickOffStatus').value = 'COMPLETED';
+        document.getElementById('tickOffDistance').value = '';
+        document.getElementById('tickOffTime').value = '';
+        document.getElementById('tickOffNotes').value = '';
+        document.getElementById('tickOffDetails').style.display = 'block';
+        document.getElementById('tickOffModal').classList.add('active');
+    };
 }
 
 // ─── Timeline ───
@@ -1935,11 +2222,54 @@ function setupEventForm() {
         submitBtn.textContent = 'Saving...';
 
         try {
-            const { error } = await createUserEvent(eventData);
+            const { data: createdEvent, error } = await createUserEvent(eventData);
             if (error) {
                 submitBtn.textContent = 'Error!';
                 setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 2000);
                 return;
+            }
+
+            // Adjustment Engine Trigger
+            if ((type === 'sickness' || type === 'injury') && committedPlanId) {
+                const commit = await getCommittedPlan(currentUser.id);
+                if (commit) {
+                    const upcomingWorkouts = await loadUserWorkouts(currentUser.id, commit.id);
+                    // Filter to only future workouts starting from the event start date
+                    const futureWorkouts = upcomingWorkouts.filter(w => new Date(w.scheduled_date) >= new Date(startDate) && w.status !== 'COMPLETED');
+                    
+                    if (futureWorkouts.length > 0) {
+                        // Estimate VDOT or use a default if not fully implemented in profile
+                        let vdot = 50; 
+                        
+                        const adjustmentResult = runAdjustmentEngine({ vdot }, {
+                            reason: type,
+                            startDate: startDate,
+                            endDate: eventData.end_date
+                        }, futureWorkouts);
+                        
+                        // Save the adjustment log
+                        await createPlanAdjustment({
+                            user_id: currentUser.id,
+                            event_reason: type,
+                            state_before: adjustmentResult.athleteStateBefore,
+                            state_after: adjustmentResult.athleteStateAfter,
+                            schedule_adjustments: adjustmentResult.scheduleAdjustments
+                        });
+                        
+                        // Apply adjusted workouts back to the database
+                        for (const adjW of adjustmentResult.scheduleAdjustments.adjustedWorkouts) {
+                            await updateUserWorkout(adjW.id, {
+                                workout_type: adjW.workout_type,
+                                planned_data: adjW.planned_data,
+                                actual_data: adjW.actual_data || {}
+                            });
+                        }
+                        alert('Your training schedule has been automatically adjusted due to your ' + type + '.');
+                        if (document.querySelector('.schedule-list')) {
+                            renderUserSchedule(commit.id);
+                        }
+                    }
+                }
             }
 
             submitBtn.textContent = '✓ Added!';

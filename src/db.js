@@ -211,7 +211,7 @@ export async function deleteUserEvent(eventId) {
 }
 
 // ─── Plan Commits ───
-export async function commitToPlan(userId, planId) {
+export async function commitToPlan(userId, planId, generatedWorkouts = []) {
     const { data, error } = await supabase
         .from('user_plan_commits')
         .upsert({
@@ -226,8 +226,34 @@ export async function commitToPlan(userId, planId) {
 
     if (error) {
         console.error('Error committing to plan:', error);
+        return { error };
     }
-    return { data, error };
+
+    // Clear existing workouts for this commit, just in case
+    await supabase.from('user_workouts').delete().eq('plan_commit_id', data.id);
+
+    // Insert new generated workouts
+    if (generatedWorkouts && generatedWorkouts.length > 0) {
+        const workoutsToInsert = generatedWorkouts.map(w => ({
+            user_id: userId,
+            plan_commit_id: data.id,
+            scheduled_date: w.scheduled_date,
+            workout_type: w.workout_type,
+            planned_data: w.planned_data,
+            status: 'PLANNED'
+        }));
+
+        const { error: insertError } = await supabase
+            .from('user_workouts')
+            .insert(workoutsToInsert);
+
+        if (insertError) {
+            console.error('Error inserting generated workouts:', insertError);
+            return { data, error: insertError };
+        }
+    }
+
+    return { data, error: null };
 }
 
 export async function uncommitFromPlan(userId) {
@@ -280,3 +306,58 @@ export async function updatePlanWeek(weekId, days) {
     }
     return { error };
 }
+
+// ─── User Workouts & Tracking ───
+export async function loadUserWorkouts(userId, planCommitId) {
+    const { data, error } = await supabase
+        .from('user_workouts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('plan_commit_id', planCommitId)
+        .order('scheduled_date', { ascending: true });
+
+    if (error) {
+        console.error('Error loading user workouts:', error);
+        return [];
+    }
+    return data || [];
+}
+
+export async function updateUserWorkout(workoutId, updateData) {
+    const { data, error } = await supabase
+        .from('user_workouts')
+        .update(updateData)
+        .eq('id', workoutId)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating user workout:', error);
+    }
+    return { data, error };
+}
+
+// ─── Plan Adjustments ───
+export async function createPlanAdjustment(adjustmentData) {
+    const { data, error } = await supabase
+        .from('plan_adjustments')
+        .insert(adjustmentData)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error creating plan adjustment:', error);
+    }
+    return { data, error };
+}
+
+// ─── Sandbox ───
+export async function wipeSandboxData(sandboxUserId) {
+    // Delete in order to avoid FK issues, though cascade should handle it.
+    await supabase.from('user_workouts').delete().eq('user_id', sandboxUserId);
+    await supabase.from('plan_adjustments').delete().eq('user_id', sandboxUserId);
+    await supabase.from('user_events').delete().eq('user_id', sandboxUserId);
+    await supabase.from('user_plan_commits').delete().eq('user_id', sandboxUserId);
+    await supabase.from('user_plan_customizations').delete().eq('user_id', sandboxUserId);
+}
+

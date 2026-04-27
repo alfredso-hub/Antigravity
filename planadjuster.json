@@ -1,0 +1,78 @@
+{
+  "athleteId": "usr_88392A",
+  "timestamp": "2026-04-27T19:37:00Z",
+  "event": "ADJUSTMENT_ENGINE_TRIGGERED",
+  "interruptionData": {
+    "reason": "SICKNESS",
+    "feverReported": true,
+    "startDate": "2026-04-19",
+    "endDate": "2026-04-26",
+    "daysMissed": 8
+  },
+  "athleteStateBefore": {
+    "vdot": 54.0,
+    "metrics": {
+      "ctl": 68.5,  
+      "atl": 75.2,  
+      "tsb": -6.7   
+    },
+    "currentPhase": "SPECIFIC",
+    "targetEventDate": "2026-06-10"
+  },
+  "athleteStateAfter": {
+    "vdot": 52.9, 
+    "metrics": {
+      "ctl": 58.1,  
+      "atl": 22.4,  
+      "tsb": 35.7   
+    },
+    "vdotReductionApplied": -0.02,
+    "notes": "VDOT reduced by 2% (Daniels 6-13 day rule). High TSB indicates loss of fatigue but onset of detraining."
+  },
+  "scheduleAdjustments": {
+    "macroShift": "Target race date maintained. Specific phase condensed; 1 VO2max session dropped.",
+    "intensityLockActive": true,
+    "intensityLockExpiration": "2026-05-03",
+    "upcomingWorkouts": [
+      {
+        "date": "2026-04-27",
+        "originalWorkout": {
+          "workoutId": "wk_101",
+          "type": "INTERVAL",
+          "targetPaces": {"interval": "3:45/km", "recovery": "5:30/km"},
+          "plannedDurationMins": 65,
+          "expectedTss": 90,
+          "description": "6 x 1000m at 5k pace"
+        },
+        "adjustedWorkout": {
+          "workoutId": "wk_101_adj",
+          "type": "RECOVERY",
+          "targetPaces": {"easy": "5:15/km"},
+          "plannedDurationMins": 40,
+          "expectedTss": 35,
+          "description": "Bridge Phase 1: Re-entry run. Keep heart rate strictly Zone 1/2. Post-fever rule applied.",
+          "rulesApplied": ["Daniels 75% Volume", "Post-Fever Intensity Lock"]
+        }
+      },
+      {
+        "date": "2026-04-28",
+        "originalWorkout": {
+          "workoutId": "wk_102",
+          "type": "EASY",
+          "targetPaces": {"easy": "4:55/km"},
+          "plannedDurationMins": 60,
+          "expectedTss": 50
+        },
+        "adjustedWorkout": {
+          "workoutId": "wk_102_adj",
+          "type": "EASY",
+          "targetPaces": {"easy": "5:05/km"},
+          "plannedDurationMins": 45,
+          "expectedTss": 38,
+          "description": "Bridge Phase 1: Gradual volume rebuild based on new CTL.",
+          "rulesApplied": ["Adjusted VDOT Paces", "Volume Capped at new CTL threshold"]
+        }
+      }
+    ]
+  }
+}
