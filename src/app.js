@@ -1797,12 +1797,19 @@ function renderTimelineChart() {
         });
     }
 
-    if (timelineChart) timelineChart.destroy();
+    if (timelineChart) {
+        timelineChart.destroy();
+        timelineChart = null;
+    }
+
+    // Don't render chart if there's no data at all
+    if (raceData.length === 0 && healthEvents.length === 0) return;
 
     Chart.defaults.color = '#98989D';
     Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
 
-    timelineChart = new Chart(ctx, {
+    try {
+        timelineChart = new Chart(ctx, {
         type: 'scatter',
         data: { datasets },
         options: {
@@ -1871,6 +1878,9 @@ function renderTimelineChart() {
             }
         }
     });
+    } catch (err) {
+        console.error('Error rendering timeline chart:', err);
+    }
 }
 
 function setupEventForm() {
@@ -1901,10 +1911,16 @@ function setupEventForm() {
         if (!currentUser) return;
 
         const type = typeSelect.value;
+        const startDate = document.getElementById('eventStartDate').value;
+        if (!startDate) {
+            alert('Please select a date.');
+            return;
+        }
+
         const eventData = {
             user_id: currentUser.id,
             event_type: type,
-            start_date: document.getElementById('eventStartDate').value,
+            start_date: startDate,
             notes: document.getElementById('eventNotes').value || null
         };
 
@@ -1919,18 +1935,26 @@ function setupEventForm() {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Saving...';
 
-        const { error } = await createUserEvent(eventData);
-        if (error) {
-            submitBtn.textContent = 'Error!';
-            setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 2000);
-        } else {
+        try {
+            const { error } = await createUserEvent(eventData);
+            if (error) {
+                submitBtn.textContent = 'Error!';
+                setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 2000);
+                return;
+            }
+
             submitBtn.textContent = '✓ Added!';
             form.reset();
             // Reset event type to race to reset form field visibility
             typeSelect.value = 'race';
             typeSelect.dispatchEvent(new Event('change'));
-            setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 1500);
+
             await loadAndRenderTimeline();
+        } catch (err) {
+            console.error('Error saving event:', err);
+        } finally {
+            // Always re-enable the button
+            setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 1500);
         }
     });
 }
