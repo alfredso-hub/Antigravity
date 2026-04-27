@@ -75,10 +75,30 @@ function renderAdminToggle() {
                 <span class="toggle-slider"></span>
             </label>
         </div>
+        <div class="admin-toggle-container" id="sandboxToggleContainer" style="display:${adminModeEnabled ? 'flex' : 'none'}; margin-left: 12px;">
+            <span class="admin-toggle-label" style="color: #FF9F0A;">Sandbox</span>
+            <label class="admin-toggle">
+                <input type="checkbox" id="sandboxModeCheckbox" ${isSandboxMode ? 'checked' : ''}>
+                <span class="toggle-slider" style="background: #FF9F0A;"></span>
+            </label>
+        </div>
     `;
     document.getElementById('adminModeCheckbox').addEventListener('change', (e) => {
         adminModeEnabled = e.target.checked;
+        // Show/hide sandbox toggle in header
+        const sandboxContainer = document.getElementById('sandboxToggleContainer');
+        if (sandboxContainer) sandboxContainer.style.display = adminModeEnabled ? 'flex' : 'none';
+        // If admin turned off while sandbox is on, turn sandbox off
+        if (!adminModeEnabled && isSandboxMode) {
+            isSandboxMode = false;
+            document.getElementById('sandboxModeCheckbox').checked = false;
+            toggleSandboxMode(false);
+        }
         updateAdminUI();
+    });
+    document.getElementById('sandboxModeCheckbox').addEventListener('change', async (e) => {
+        isSandboxMode = e.target.checked;
+        await toggleSandboxMode(isSandboxMode);
     });
 }
 
@@ -89,19 +109,8 @@ function updateAdminUI() {
             adminActions.style.display = 'flex';
             adminActions.innerHTML = `
                 <button class="btn btn-sm btn-danger" id="adminDeletePlanBtn" title="Delete this plan">🗑️</button>
-                <div class="sandbox-toggle-container" style="margin-left: 10px; display: flex; align-items: center; gap: 5px;">
-                    <span style="font-size: 0.8rem; color: var(--text-secondary);">Sandbox</span>
-                    <label class="admin-toggle">
-                        <input type="checkbox" id="sandboxModeCheckbox" ${isSandboxMode ? 'checked' : ''}>
-                        <span class="toggle-slider" style="background-color: var(--secondary-color);"></span>
-                    </label>
-                </div>
             `;
             document.getElementById('adminDeletePlanBtn').addEventListener('click', handleDeletePlan);
-            document.getElementById('sandboxModeCheckbox').addEventListener('change', async (e) => {
-                isSandboxMode = e.target.checked;
-                await toggleSandboxMode(isSandboxMode);
-            });
         } else {
             adminActions.style.display = 'none';
             adminActions.innerHTML = '';
