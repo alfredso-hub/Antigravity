@@ -1861,7 +1861,6 @@ function renderTimelineChart() {
                     title: { display: true, text: 'Date', color: '#636366' }
                 },
                 y: {
-                    reverse: true, // Lower time = better = higher on chart
                     grid: { color: 'rgba(255,255,255,0.05)' },
                     title: {
                         display: true,
