@@ -8,11 +8,10 @@ import {
     saveUserCustomization, createPlan, loadProfile, saveProfile,
     loadAdminStatus, loadUserEvents, createUserEvent, updateUserEvent,
     deleteUserEvent, commitToPlan, uncommitFromPlan, getCommittedPlan,
-    loadUserWorkouts, updateUserWorkout, createPlanAdjustment, wipeSandboxData
-} from './db.js';
-import { runAdjustmentEngine } from './engine/adjustment.js';
+    loadUserWorkouts, updateUserWorkout, createPlanAdjustment, wipeSandboxData,
     deletePlan, updatePlanWeek
 } from './db.js';
+import { runAdjustmentEngine } from './engine/adjustment.js';
 
 // ─── State ───
 let currentUser = null;
