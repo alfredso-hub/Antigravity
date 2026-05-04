@@ -499,6 +499,68 @@ select:focus {
     color: var(--text-tertiary);
 }
 
+/* ═══ Day Cell Status (Committed Plan) ═══ */
+.day-clickable {
+    cursor: pointer !important;
+    position: relative;
+}
+
+.day-clickable:hover {
+    background: var(--surface-tertiary) !important;
+    transform: scale(1.02);
+    z-index: 1;
+}
+
+.day-completed {
+    border-left: 3px solid var(--accent-green);
+}
+
+.day-skipped {
+    opacity: 0.5;
+    border-left: 3px solid var(--accent-red);
+}
+
+.day-status-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.day-status-badge.completed {
+    background: rgba(48, 209, 88, 0.2);
+    color: var(--accent-green);
+    border: 1px solid rgba(48, 209, 88, 0.4);
+}
+
+.day-status-badge.skipped {
+    background: rgba(255, 69, 58, 0.2);
+    color: var(--accent-red);
+    border: 1px solid rgba(255, 69, 58, 0.4);
+}
+
+.day-planned.day-clickable::after {
+    content: 'Log';
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.day-planned.day-clickable:hover::after {
+    opacity: 1;
+}
+
 /* ═══════════════════════════════════════════════
    Create Plan – Day Editor
    ═══════════════════════════════════════════════ */

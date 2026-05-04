@@ -25,6 +25,7 @@ let allUserEvents = [];
 let timelineChart = null;
 let committedPlanId = null;
 let committedPlanData = null;
+let currentWorkoutsMap = {};
 let volumeCompChart = null;
 let cumulativeChart = null;
 let completionChart = null;
@@ -151,10 +152,7 @@ async function toggleSandboxMode(enabled) {
                     await wipeSandboxData(SANDBOX_USER_ID);
                     alert('Sandbox wiped!');
                     await loadAndRenderTimeline();
-                    renderCommitButton();
-                    const commit = await getCommittedPlan(currentUser.id);
-                    if(commit) renderUserSchedule(commit.id);
-                    else { const mc = document.querySelector('.main-content'); if(mc && mc.querySelector('.schedule-list')) location.reload(); }
+                    await renderCommitButton();
                 }
             });
         }
@@ -164,19 +162,7 @@ async function toggleSandboxMode(enabled) {
 
     // Reload UI state with new user ID
     await loadAndRenderTimeline();
-    renderCommitButton();
-    const commit = await getCommittedPlan(currentUser.id);
-    if (commit) {
-        // If we were on schedule view, re-render it
-        if (document.querySelector('.schedule-list')) {
-            renderUserSchedule(commit.id);
-        }
-    } else {
-        // If we were on schedule view but now have no commit, go back to plan view
-        if (document.querySelector('.schedule-list')) {
-            location.reload();
-        }
-    }
+    await renderCommitButton();
 }
 
 async function handleDeletePlan() {
@@ -291,7 +277,7 @@ async function loadAndRenderPlan() {
         currentPlanWeeks = [];
         currentCustomizations = {};
     }
-    renderPlan();
+    await renderPlan();
 }
 
 // ─── Tuning Section ───
@@ -438,7 +424,7 @@ function renderChart(weeks, unit) {
 }
 
 // ─── Plan Rendering ───
-function renderPlan() {
+async function renderPlan() {
     const vdot = getVDOT();
     const unit = document.getElementById('units').value;
     const conversion = unit === 'mi' ? 1.60934 : 1;
@@ -599,6 +585,58 @@ function renderPlan() {
 
     document.getElementById('planContainer').innerHTML = planHtml;
     setupDragDrop();
+
+    // If committed, load workouts and add click handlers + status badges
+    if (committedPlanData) {
+        const workouts = await loadUserWorkouts(currentUser.id, committedPlanData.id);
+        currentWorkoutsMap = {};
+        (workouts || []).forEach(w => {
+            currentWorkoutsMap[w.scheduled_date] = w;
+        });
+
+        // Add status badges and click handlers to day cells
+        document.querySelectorAll('.day-cell').forEach(cell => {
+            const weekNum = parseInt(cell.dataset.week);
+            const dayIdx = parseInt(cell.dataset.day);
+
+            // Compute scheduled date for this cell
+            if (hasDates && planStartDate) {
+                const cellDate = new Date(planStartDate);
+                cellDate.setDate(planStartDate.getDate() + (weekNum - 1) * 7 + dayIdx);
+                const dateKey = cellDate.toISOString().split('T')[0];
+                const workout = currentWorkoutsMap[dateKey];
+
+                if (workout) {
+                    // Add status badge
+                    if (workout.status === 'COMPLETED') {
+                        cell.classList.add('day-completed');
+                        const badge = document.createElement('div');
+                        badge.className = 'day-status-badge completed';
+                        badge.textContent = '✓';
+                        cell.appendChild(badge);
+                    } else if (workout.status === 'SKIPPED') {
+                        cell.classList.add('day-skipped');
+                        const badge = document.createElement('div');
+                        badge.className = 'day-status-badge skipped';
+                        badge.textContent = '✕';
+                        cell.appendChild(badge);
+                    } else {
+                        cell.classList.add('day-planned');
+                    }
+
+                    // Make clickable
+                    cell.classList.add('day-clickable');
+                    cell.style.cursor = 'pointer';
+                    const week = currentPlanWeeks.find(w => w.week_number === weekNum);
+                    const dayData = week?.days?.[dayIdx];
+                    cell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openWorkoutLogModal(workout, dayData);
+                    });
+                }
+            }
+        });
+    }
 }
 
 // ─── Drag & Drop ───
@@ -1729,27 +1767,22 @@ async function renderCommitButton() {
     }
 
     // Re-render plan to update date display
-    renderPlan();
+    await renderPlan();
 
     if (isCommitted) {
         container.innerHTML = `
             <button class="btn-uncommit" id="uncommitBtn">
                 <span>✓</span> Committed — Uncommit
             </button>
-            <div style="margin-top: 10px; text-align: center;">
-                <button class="btn btn-sm btn-secondary" id="viewScheduleBtn">View My Schedule</button>
-            </div>
         `;
         document.getElementById('uncommitBtn').addEventListener('click', async () => {
             const { error } = await uncommitFromPlan(currentUser.id);
             if (!error) {
                 committedPlanId = null;
                 committedPlanData = null;
+                currentWorkoutsMap = {};
                 renderCommitButton();
             }
-        });
-        document.getElementById('viewScheduleBtn').addEventListener('click', () => {
-            renderUserSchedule(commit.id);
         });
     } else {
         container.innerHTML = `
@@ -1947,143 +1980,224 @@ async function handleCommitConfirm() {
     }
 }
 
-// ─── User Schedule & Tick Off ───
-async function renderUserSchedule(commitId) {
-    const mainContainer = document.querySelector('.main-content');
-    if (!mainContainer || !currentUser) return;
+// ─── Inline Workout Log Modal ───
+function openWorkoutLogModal(workout, dayData) {
+    const existing = document.getElementById('workoutLogModal');
+    if (existing) existing.remove();
 
-    const workouts = await loadUserWorkouts(currentUser.id, commitId);
-    
-    // Create view
-    let html = `
-        <div class="content-header" style="margin-bottom: 20px;">
-            <h2 class="content-title">My Schedule</h2>
-            <button class="btn btn-secondary" onclick="location.reload()">Back to Plan</button>
-        </div>
-        <div class="schedule-list" style="display: flex; flex-direction: column; gap: 10px;">
-    `;
+    const unit = document.getElementById('units').value;
+    const plannedDist = dayData?.dist || dayData?.stats?.total || '';
+    const typeName = dayData?.type || workout.workout_type || '';
+    const typeClass = dayData?.class || 'easy';
+    const dateStr = new Date(workout.scheduled_date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
-    if (workouts.length === 0) {
-        html += `<p>No workouts found for this plan.</p>`;
-    } else {
-        // Group by week (just roughly by every 7 days)
-        let currentWeek = 0;
-        workouts.forEach((w, i) => {
-            if (i % 7 === 0) {
-                currentWeek++;
-                html += `<h3 style="margin-top: 20px; color: var(--text-primary);">Week ${currentWeek}</h3>`;
-            }
-            
-            const dateStr = new Date(w.scheduled_date).toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' });
-            const isCompleted = w.status === 'COMPLETED';
-            const isSkipped = w.status === 'SKIPPED';
-            
-            let statusBadge = '';
-            if (isCompleted) statusBadge = `<span style="color: #30D158; font-size: 0.8rem; margin-left: auto;">✓ COMPLETED</span>`;
-            if (isSkipped) statusBadge = `<span style="color: #FF453A; font-size: 0.8rem; margin-left: auto;">✕ SKIPPED</span>`;
+    // Pre-fill from existing actual_data
+    const ad = workout.actual_data || {};
+    const currentStatus = workout.status || 'PLANNED';
 
-            html += `
-                <div class="card" style="padding: 15px; display: flex; align-items: center; cursor: pointer; opacity: ${isCompleted || isSkipped ? 0.6 : 1}" onclick="openTickOffModal('${w.id}')">
-                    <div style="width: 100px; color: var(--text-secondary); font-size: 0.9rem;">${dateStr}</div>
-                    <div style="width: 80px;"><span class="pace-badge ${w.planned_data.class || 'easy'}">${w.workout_type}</span></div>
-                    <div style="flex: 1; padding: 0 15px;">${escapeHtml(w.planned_data.desc || '')}</div>
-                    ${statusBadge}
-                    ${!isCompleted && !isSkipped ? '<button class="btn btn-sm btn-primary">Tick Off</button>' : ''}
+    const modalHtml = `
+        <div class="modal active" id="workoutLogModal">
+            <div class="modal-content commit-modal-content">
+                <div class="modal-header">
+                    <h3>Log Workout</h3>
+                    <button class="close-modal" id="closeWorkoutLog">✕</button>
                 </div>
-            `;
-        });
-    }
-
-    html += `</div>`;
-    mainContainer.innerHTML = html;
-
-    // We need to attach the modal html if it doesn't exist
-    if (!document.getElementById('tickOffModal')) {
-        const modalHtml = `
-            <div class="modal" id="tickOffModal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3>Tick Off Session</h3>
-                        <button class="close-modal" id="closeTickOffModal">✕</button>
-                    </div>
-                    <div class="modal-body">
-                        <input type="hidden" id="tickOffWorkoutId">
-                        <div class="form-group">
-                            <label>Status</label>
-                            <select id="tickOffStatus" class="form-select">
-                                <option value="COMPLETED">Completed</option>
-                                <option value="SKIPPED">Skipped</option>
-                            </select>
+                <div class="modal-body">
+                    <div style="margin-bottom: 20px; padding: 12px 16px; background: var(--surface-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                        <div style="font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 4px;">${dateStr}</div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="workout-type type-${typeClass}" style="font-size: 1rem;">${typeName}</span>
+                            <span style="color: var(--text-secondary); font-size: 0.88rem;">${dayData?.desc || ''}</span>
                         </div>
-                        <div id="tickOffDetails" style="display: block;">
-                            <div class="form-group">
-                                <label>Actual Distance (km)</label>
-                                <input type="number" id="tickOffDistance" class="form-control" step="0.1" min="0" placeholder="e.g. 10.5">
+                        ${plannedDist ? `<div style="font-size: 0.78rem; color: var(--text-tertiary); margin-top: 6px;">Planned: ${plannedDist} ${unit}</div>` : ''}
+                    </div>
+
+                    <div class="commit-modal-section">
+                        <h4 class="commit-section-title">📋 Result</h4>
+                        <div class="commit-fields-grid">
+                            <div class="input-group">
+                                <label for="wlStatus">Status</label>
+                                <select id="wlStatus">
+                                    <option value="COMPLETED" ${currentStatus === 'COMPLETED' ? 'selected' : ''}>✓ Completed</option>
+                                    <option value="SKIPPED" ${currentStatus === 'SKIPPED' ? 'selected' : ''}>✕ Skipped</option>
+                                </select>
                             </div>
-                            <div class="form-group">
-                                <label>Actual Time</label>
-                                <input type="text" id="tickOffTime" class="form-control" placeholder="hh:mm:ss or mm:ss">
-                            </div>
-                            <div class="form-group">
-                                <label>Notes</label>
-                                <textarea id="tickOffNotes" class="form-control" rows="3" placeholder="How did it feel? Any deviations?"></textarea>
+                            <div class="input-group">
+                                <label for="wlRPE">Perceived Effort (RPE)</label>
+                                <select id="wlRPE">
+                                    <option value="">— Select —</option>
+                                    ${[1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}" ${ad.rpe == n ? 'selected' : ''}>${n} — ${['Very light','Light','Moderate','Somewhat hard','Hard','','Hard+','Very hard','','Max effort'][n-1] || ''}</option>`).join('')}
+                                </select>
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-primary" id="saveTickOffBtn">Save</button>
+
+                    <div id="wlCompletedFields">
+                        <div class="commit-modal-section">
+                            <h4 class="commit-section-title">📊 Actual Data</h4>
+                            <div class="commit-fields-grid">
+                                <div class="input-group">
+                                    <label for="wlDistance">Distance (${unit})</label>
+                                    <input type="number" id="wlDistance" step="0.1" min="0" placeholder="e.g. ${plannedDist || '10'}" value="${ad.distance || ''}">
+                                </div>
+                                <div class="input-group">
+                                    <label for="wlTime">Time (hh:mm:ss)</label>
+                                    <input type="text" id="wlTime" placeholder="e.g. 55:00 or 1:02:30" value="${ad.time || ''}">
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
+                    <div class="commit-modal-section">
+                        <h4 class="commit-section-title">💪 How are you feeling?</h4>
+                        <div class="commit-fields-grid">
+                            <div class="input-group">
+                                <label for="wlHealth">Health Status</label>
+                                <select id="wlHealth">
+                                    <option value="healthy" ${(ad.health || 'healthy') === 'healthy' ? 'selected' : ''}>😊 Healthy</option>
+                                    <option value="feeling_off" ${ad.health === 'feeling_off' ? 'selected' : ''}>😐 Feeling off</option>
+                                    <option value="sick" ${ad.health === 'sick' ? 'selected' : ''}>🤒 Sick</option>
+                                    <option value="injured" ${ad.health === 'injured' ? 'selected' : ''}>🩹 Injured</option>
+                                </select>
+                            </div>
+                            <div class="input-group" id="wlHealthEndGroup" style="display: none;">
+                                <label for="wlHealthEnd">Expected Recovery Date</label>
+                                <input type="date" id="wlHealthEnd">
+                            </div>
+                        </div>
+                        <div id="wlHealthNote" style="display: none; margin-top: 10px; padding: 10px; border-radius: var(--radius-sm); font-size: 0.82rem; line-height: 1.4;"></div>
+                    </div>
+
+                    <div class="commit-modal-section">
+                        <div class="input-group">
+                            <label for="wlNotes">Notes</label>
+                            <textarea id="wlNotes" rows="2" placeholder="How did the session feel?" style="resize: vertical; background: var(--surface-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; color: var(--text-main); font-family: var(--font-main); font-size: 0.95rem;">${ad.notes || ''}</textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancelWorkoutLog">Cancel</button>
+                    <button class="btn-commit" id="saveWorkoutLog">Save</button>
                 </div>
             </div>
-        `;
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-        document.getElementById('closeTickOffModal').addEventListener('click', () => {
-            document.getElementById('tickOffModal').classList.remove('active');
-        });
+    // Toggle completed fields visibility
+    const statusSel = document.getElementById('wlStatus');
+    const completedFields = document.getElementById('wlCompletedFields');
+    const toggleCompletedFields = () => {
+        completedFields.style.display = statusSel.value === 'COMPLETED' ? 'block' : 'none';
+    };
+    statusSel.addEventListener('change', toggleCompletedFields);
+    toggleCompletedFields();
 
-        document.getElementById('tickOffStatus').addEventListener('change', (e) => {
-            document.getElementById('tickOffDetails').style.display = e.target.value === 'COMPLETED' ? 'block' : 'none';
-        });
+    // Toggle health end date & warning
+    const healthSel = document.getElementById('wlHealth');
+    const healthEndGroup = document.getElementById('wlHealthEndGroup');
+    const healthNote = document.getElementById('wlHealthNote');
+    const toggleHealth = () => {
+        const val = healthSel.value;
+        const showEnd = val === 'sick' || val === 'injured';
+        healthEndGroup.style.display = showEnd ? 'block' : 'none';
+        if (showEnd) {
+            const defaultEnd = new Date(workout.scheduled_date);
+            defaultEnd.setDate(defaultEnd.getDate() + (val === 'sick' ? 5 : 10));
+            document.getElementById('wlHealthEnd').value = defaultEnd.toISOString().split('T')[0];
+            const label = val === 'sick' ? 'sickness' : 'injury';
+            healthNote.style.display = 'block';
+            healthNote.style.background = val === 'sick' ? 'rgba(255,159,10,0.1)' : 'rgba(255,69,58,0.1)';
+            healthNote.style.color = val === 'sick' ? 'var(--accent-orange)' : 'var(--accent-red)';
+            healthNote.innerHTML = `⚠️ A ${label} event will be created and your training plan will be <strong>automatically adjusted</strong> for the recovery period.`;
+        } else {
+            healthNote.style.display = 'none';
+        }
+    };
+    healthSel.addEventListener('change', toggleHealth);
+    toggleHealth();
 
-        document.getElementById('saveTickOffBtn').addEventListener('click', async () => {
-            const wId = document.getElementById('tickOffWorkoutId').value;
-            const status = document.getElementById('tickOffStatus').value;
-            const actualData = {};
-            if (status === 'COMPLETED') {
-                actualData.distance = document.getElementById('tickOffDistance').value;
-                actualData.time = document.getElementById('tickOffTime').value;
-                actualData.notes = document.getElementById('tickOffNotes').value;
-            }
+    // Close handlers
+    document.getElementById('closeWorkoutLog').addEventListener('click', () => document.getElementById('workoutLogModal').remove());
+    document.getElementById('cancelWorkoutLog').addEventListener('click', () => document.getElementById('workoutLogModal').remove());
+    document.getElementById('workoutLogModal').addEventListener('click', (e) => {
+        if (e.target.id === 'workoutLogModal') document.getElementById('workoutLogModal').remove();
+    });
 
-            const btn = document.getElementById('saveTickOffBtn');
-            btn.disabled = true;
-            btn.textContent = 'Saving...';
+    // Save handler
+    document.getElementById('saveWorkoutLog').addEventListener('click', () => handleWorkoutLogSave(workout));
+}
 
-            const { error } = await updateUserWorkout(wId, { status, actual_data: actualData });
-            if (!error) {
-                document.getElementById('tickOffModal').classList.remove('active');
-                renderUserSchedule(commitId); // refresh
-            } else {
-                alert('Error saving workout status.');
-            }
-            
-            btn.disabled = false;
-            btn.textContent = 'Save';
-        });
+async function handleWorkoutLogSave(workout) {
+    const status = document.getElementById('wlStatus').value;
+    const actualData = {
+        rpe: document.getElementById('wlRPE').value || null,
+        health: document.getElementById('wlHealth').value,
+        notes: document.getElementById('wlNotes').value || null
+    };
+
+    if (status === 'COMPLETED') {
+        actualData.distance = document.getElementById('wlDistance').value || null;
+        actualData.time = document.getElementById('wlTime').value || null;
     }
 
-    // Expose open function globally so inline onclick works
-    window.openTickOffModal = (workoutId) => {
-        document.getElementById('tickOffWorkoutId').value = workoutId;
-        document.getElementById('tickOffStatus').value = 'COMPLETED';
-        document.getElementById('tickOffDistance').value = '';
-        document.getElementById('tickOffTime').value = '';
-        document.getElementById('tickOffNotes').value = '';
-        document.getElementById('tickOffDetails').style.display = 'block';
-        document.getElementById('tickOffModal').classList.add('active');
-    };
+    const btn = document.getElementById('saveWorkoutLog');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    // Save the workout
+    const { error } = await updateUserWorkout(workout.id, { status, actual_data: actualData });
+    if (error) {
+        alert('Error saving workout.');
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        return;
+    }
+
+    // If sick or injured, create a health event and trigger adjustment engine
+    const healthVal = actualData.health;
+    if (healthVal === 'sick' || healthVal === 'injured') {
+        const endDate = document.getElementById('wlHealthEnd').value;
+        const eventType = healthVal === 'sick' ? 'sickness' : 'injury';
+
+        // Create health event
+        await createUserEvent({
+            user_id: currentUser.id,
+            event_type: eventType,
+            start_date: workout.scheduled_date,
+            end_date: endDate || workout.scheduled_date,
+            notes: `Reported during workout log`
+        });
+
+        // Trigger adjustment engine
+        if (committedPlanData) {
+            const allWorkouts = await loadUserWorkouts(currentUser.id, committedPlanData.id);
+            const adjusted = runAdjustmentEngine(allWorkouts, {
+                event_type: eventType,
+                start_date: workout.scheduled_date,
+                end_date: endDate || workout.scheduled_date
+            });
+
+            if (adjusted && adjusted.length > 0) {
+                for (const adjW of adjusted) {
+                    await updateUserWorkout(adjW.id, {
+                        workout_type: adjW.workout_type,
+                        planned_data: adjW.planned_data,
+                        actual_data: adjW.actual_data || {}
+                    });
+                }
+                alert(`Your plan has been automatically adjusted for your ${eventType}.`);
+            }
+        }
+
+        // Refresh events for timeline
+        allUserEvents = await loadUserEvents(currentUser.id);
+    }
+
+    document.getElementById('workoutLogModal')?.remove();
+    await renderCommitButton(); // Refresh plan + analytics
 }
+
 // ─── Progress Analytics ───
 async function renderProgressAnalytics(commitId) {
     if (!currentUser) return;
@@ -2621,9 +2735,7 @@ function setupEventForm() {
                             });
                         }
                         alert('Your training schedule has been automatically adjusted due to your ' + type + '.');
-                        if (document.querySelector('.schedule-list')) {
-                            renderUserSchedule(commit.id);
-                        }
+                        await renderCommitButton();
                     }
                 }
             }
