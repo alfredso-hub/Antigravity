@@ -1193,6 +1193,195 @@ select:focus {
     font-weight: 500;
 }
 
+/* ═══ Modal ═══ */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.15s ease-out;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--surface);
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-lg);
+    width: 90%;
+    max-width: 560px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    animation: fadeInDown 0.25s ease-out;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.close-modal {
+    background: var(--surface-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.close-modal:hover {
+    background: var(--surface-tertiary);
+    color: var(--text-main);
+}
+
+.modal-body {
+    padding: 20px 24px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+}
+
+/* ═══ Commit Modal ═══ */
+.commit-modal-content {
+    max-width: 620px;
+}
+
+.commit-modal-section {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--surface-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+}
+
+.commit-section-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 14px;
+}
+
+.commit-fields-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+/* ═══ Progress Analytics (Collapsible) ═══ */
+.analytics-collapsible {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 20px;
+    transition: var(--transition);
+}
+
+.analytics-collapsible[open] {
+    border-color: var(--border-hover);
+}
+
+.analytics-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 24px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-main);
+    user-select: none;
+    list-style: none;
+    transition: background 0.15s;
+}
+
+.analytics-summary::-webkit-details-marker {
+    display: none;
+}
+
+.analytics-summary:hover {
+    background: var(--surface-secondary);
+}
+
+.analytics-icon {
+    font-size: 1.2rem;
+}
+
+.analytics-hint {
+    margin-left: auto;
+    font-size: 0.78rem;
+    font-weight: 400;
+    color: var(--text-tertiary);
+    transition: var(--transition);
+}
+
+.analytics-collapsible[open] .analytics-hint {
+    opacity: 0;
+}
+
+.analytics-content {
+    padding: 0 24px 24px;
+}
+
+.analytics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.analytics-chart-card {
+    background: var(--surface-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+}
+
+.analytics-chart-card h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.analytics-chart-container {
+    position: relative;
+    height: 220px;
+    width: 100%;
+}
+
 /* ═══ Timeline Chart ═══ */
 .timeline-chart-container {
     position: relative;
@@ -1345,6 +1534,10 @@ select:focus {
     .workout-top-row {
         flex-wrap: wrap;
     }
+
+    .analytics-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 600px) {
@@ -1371,5 +1564,13 @@ select:focus {
 
     .day-editor-header {
         flex-wrap: wrap;
+    }
+
+    .commit-fields-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-chart-container {
+        height: 180px;
     }
 }

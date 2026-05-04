@@ -35,6 +35,7 @@ Run these SQL files in the Supabase SQL Editor **in order**:
 | `sql/05_plan_adjustments.sql` | Logs when the adjustment engine modifies a plan |
 | `sql/06_sandbox_user.sql` | Creates the fixed-UUID sandbox user for admin testing |
 | `sql/07_admin_rls_bypass.sql` | Allows admins to read/write any user's rows (required for Sandbox Mode) |
+| `sql/08_commit_dates.sql` | Adds `start_date`, `race_date`, and `commit_metadata` JSONB to `user_plan_commits` |
 
 ---
 

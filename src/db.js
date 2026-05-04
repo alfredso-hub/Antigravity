@@ -211,13 +211,16 @@ export async function deleteUserEvent(eventId) {
 }
 
 // ─── Plan Commits ───
-export async function commitToPlan(userId, planId, generatedWorkouts = []) {
+export async function commitToPlan(userId, planId, generatedWorkouts = [], { startDate = null, raceDate = null, metadata = {} } = {}) {
     const { data, error } = await supabase
         .from('user_plan_commits')
         .upsert({
             user_id: userId,
             plan_id: planId,
-            committed_at: new Date().toISOString()
+            committed_at: new Date().toISOString(),
+            start_date: startDate,
+            race_date: raceDate,
+            commit_metadata: metadata
         }, {
             onConflict: 'user_id'
         })

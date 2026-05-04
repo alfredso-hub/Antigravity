@@ -24,6 +24,10 @@ let adminModeEnabled = false;
 let allUserEvents = [];
 let timelineChart = null;
 let committedPlanId = null;
+let committedPlanData = null;
+let volumeCompChart = null;
+let cumulativeChart = null;
+let completionChart = null;
 
 // Sandbox Mode State
 let isSandboxMode = false;
@@ -367,9 +371,12 @@ function renderChart(weeks, unit) {
     Chart.defaults.color = '#98989D';
     Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
 
-    // Get health overlays
-    const raceDate = new Date(document.getElementById('raceDate').value);
-    const healthAnnotations = getHealthOverlaysForPlanChart(weeks, raceDate);
+    // Get health overlays (only when committed and we have a race date)
+    let healthAnnotations = {};
+    if (committedPlanData?.race_date) {
+        const raceDate = new Date(committedPlanData.race_date);
+        healthAnnotations = getHealthOverlaysForPlanChart(weeks, raceDate);
+    }
 
     myChart = new Chart(ctx, {
         type: 'line',
@@ -481,8 +488,17 @@ function renderPlan() {
         return;
     }
 
-    const raceDate = new Date(document.getElementById('raceDate').value);
     const totalWeeks = currentPlanWeeks.length;
+
+    // Determine if we have dates (only when committed)
+    let planStartDate = null;
+    if (committedPlanData?.start_date) {
+        planStartDate = new Date(committedPlanData.start_date);
+    } else if (committedPlanData?.race_date) {
+        planStartDate = new Date(committedPlanData.race_date);
+        planStartDate.setDate(planStartDate.getDate() - ((totalWeeks * 7) - 1));
+    }
+    const hasDates = !!planStartDate;
 
     // Chart
     const hasStats = currentPlanWeeks[0]?.days?.[0]?.stats;
@@ -496,9 +512,13 @@ function renderPlan() {
     let planHtml = '';
     currentPlanWeeks.forEach((week, weekIndex) => {
         const weekNum = week.week_number;
-        const weeksUntilRace = totalWeeks - weekNum;
-        const weekStartDate = new Date(raceDate);
-        weekStartDate.setDate(raceDate.getDate() - (weeksUntilRace * 7) - 6);
+
+        // Compute week start date if we have dates
+        let weekStartDate = null;
+        if (hasDates) {
+            weekStartDate = new Date(planStartDate);
+            weekStartDate.setDate(planStartDate.getDate() + (weekNum - 1) * 7);
+        }
 
         let days = [...(week.days || [])];
         if (currentCustomizations[weekNum]) {
@@ -531,16 +551,23 @@ function renderPlan() {
             `;
         }
 
-        const weekEndDate = new Date(weekStartDate);
-        weekEndDate.setDate(weekStartDate.getDate() + 6);
-        const formatDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-        const weekDates = `${formatDate(weekStartDate)} – ${formatDate(weekEndDate)}`;
+        // Date display
+        let weekDatesHtml = '';
+        if (hasDates && weekStartDate) {
+            const weekEndDate = new Date(weekStartDate);
+            weekEndDate.setDate(weekStartDate.getDate() + 6);
+            const formatDate = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            weekDatesHtml = `<div class="week-dates">${formatDate(weekStartDate)} – ${formatDate(weekEndDate)}</div>`;
+        }
 
         let daysHtml = '';
         days.forEach((day, dayIndex) => {
-            const dayDate = new Date(weekStartDate);
-            dayDate.setDate(weekStartDate.getDate() + dayIndex);
-            const dayDateStr = dayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+            let dayDateStr = '';
+            if (hasDates && weekStartDate) {
+                const dayDate = new Date(weekStartDate);
+                dayDate.setDate(weekStartDate.getDate() + dayIndex);
+                dayDateStr = dayDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+            }
 
             let desc = day.desc || '';
             if (day.pace && pacesDisplay[day.pace]) {
@@ -550,7 +577,7 @@ function renderPlan() {
 
             daysHtml += `
                 <div class="day-cell" draggable="true" data-week="${weekNum}" data-day="${dayIndex}">
-                    <div class="day-date">${dayDateStr}</div>
+                    ${dayDateStr ? `<div class="day-date">${dayDateStr}</div>` : ''}
                     <div class="day-name">${day.day || 'Day'}</div>
                     <div class="workout-type type-${day.class || 'easy'}">${day.type || ''}</div>
                     <div class="workout-detail">${desc}</div>
@@ -562,7 +589,7 @@ function renderPlan() {
             <div class="week-card" data-week="${weekNum}">
                 <div class="week-header">
                     <div>Week ${weekNum}</div>
-                    <div class="week-dates">${weekDates}</div>
+                    ${weekDatesHtml}
                     ${statsHtml}
                 </div>
                 <div class="days-grid">${daysHtml}</div>
@@ -1688,8 +1715,21 @@ async function renderCommitButton() {
 
     const commit = await getCommittedPlan(currentUser.id);
     committedPlanId = commit?.plan_id || null;
+    committedPlanData = commit || null;
     const currentPlanId = document.getElementById('planSelect').value;
     const isCommitted = committedPlanId === currentPlanId;
+
+    // Show/hide analytics
+    const analyticsWrapper = document.getElementById('progressAnalyticsWrapper');
+    if (analyticsWrapper) {
+        analyticsWrapper.style.display = isCommitted ? 'block' : 'none';
+        if (isCommitted && commit) {
+            renderProgressAnalytics(commit.id);
+        }
+    }
+
+    // Re-render plan to update date display
+    renderPlan();
 
     if (isCommitted) {
         container.innerHTML = `
@@ -1704,92 +1744,206 @@ async function renderCommitButton() {
             const { error } = await uncommitFromPlan(currentUser.id);
             if (!error) {
                 committedPlanId = null;
+                committedPlanData = null;
                 renderCommitButton();
             }
         });
         document.getElementById('viewScheduleBtn').addEventListener('click', () => {
-            // Trigger a view change to the user schedule (will implement below)
             renderUserSchedule(commit.id);
         });
     } else {
         container.innerHTML = `
-            <div class="commit-date-picker" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center; justify-content: center;">
-                <select id="commitDateType" class="form-select" style="width: auto;">
-                    <option value="start">Plan Start Date</option>
-                    <option value="race">Target Race Date</option>
-                </select>
-                <input type="date" id="commitDateValue" class="form-control" style="width: auto;">
-            </div>
             <button class="btn-commit" id="commitBtn">Commit to Plan</button>
         `;
-        
-        // Default to today or next Monday for start date
-        const dateInput = document.getElementById('commitDateValue');
-        const today = new Date();
-        const nextMonday = new Date(today);
-        nextMonday.setDate(today.getDate() + ((1 + 7 - today.getDay()) % 7 || 7));
-        dateInput.value = nextMonday.toISOString().split('T')[0];
-
-        document.getElementById('commitBtn').addEventListener('click', async () => {
-            const planId = document.getElementById('planSelect').value;
-            const dateType = document.getElementById('commitDateType').value;
-            const dateValue = document.getElementById('commitDateValue').value;
-
-            if (!planId || !dateValue) {
-                alert('Please select a plan and a date.');
-                return;
-            }
-
-            // Generate workouts based on currentPlanWeeks
-            if (!currentPlanWeeks || currentPlanWeeks.length === 0) {
-                alert('Wait for plan weeks to load.');
-                return;
-            }
-
-            const totalWeeks = currentPlanWeeks.length;
-            let startDate = new Date(dateValue);
-            if (dateType === 'race') {
-                // Assuming race is on the last day (Sunday) of the last week.
-                // Subtract (totalWeeks * 7) - 1 days
-                startDate.setDate(startDate.getDate() - ((totalWeeks * 7) - 1));
-            }
-
-            const generatedWorkouts = [];
-            let currentDay = new Date(startDate);
-
-            // Reorder based on user customizations if any exist in currentPlanWeeks
-            for (const week of currentPlanWeeks) {
-                const weekNum = week.week_number;
-                const days = week.days; // array of 7 days
-                // If we loaded customizations, we should apply them here. 
-                // For simplicity, assuming days array is in order Mon-Sun.
-                
-                for (let i = 0; i < 7; i++) {
-                    const dayData = days[i];
-                    generatedWorkouts.push({
-                        scheduled_date: currentDay.toISOString().split('T')[0],
-                        workout_type: dayData.type,
-                        planned_data: dayData
-                    });
-                    // increment day
-                    currentDay.setDate(currentDay.getDate() + 1);
-                }
-            }
-
-            const btn = document.getElementById('commitBtn');
-            btn.disabled = true;
-            btn.textContent = 'Committing...';
-
-            const { error } = await commitToPlan(currentUser.id, planId, generatedWorkouts);
-            if (!error) {
-                committedPlanId = planId;
-                renderCommitButton();
-            } else {
-                alert('Error committing to plan.');
-                btn.disabled = false;
-                btn.textContent = 'Commit to Plan';
-            }
+        document.getElementById('commitBtn').addEventListener('click', () => {
+            openCommitModal();
         });
+    }
+}
+
+function openCommitModal() {
+    // Remove existing modal if present
+    const existing = document.getElementById('commitModal');
+    if (existing) existing.remove();
+
+    const today = new Date();
+    const nextMonday = new Date(today);
+    nextMonday.setDate(today.getDate() + ((1 + 7 - today.getDay()) % 7 || 7));
+    const defaultDate = nextMonday.toISOString().split('T')[0];
+
+    const modalHtml = `
+        <div class="modal active" id="commitModal">
+            <div class="modal-content commit-modal-content">
+                <div class="modal-header">
+                    <h3>Commit to Plan</h3>
+                    <button class="close-modal" id="closeCommitModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p style="color:var(--text-secondary); margin-bottom: 20px;">Set your schedule and training profile to generate a personalized plan.</p>
+
+                    <div class="commit-modal-section">
+                        <h4 class="commit-section-title">📅 Schedule</h4>
+                        <div class="commit-fields-grid">
+                            <div class="input-group">
+                                <label for="commitDateType">Date Type</label>
+                                <select id="commitDateType">
+                                    <option value="start">Plan Start Date</option>
+                                    <option value="race">Target Race Date</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="commitDateValue">Date</label>
+                                <input type="date" id="commitDateValue" value="${defaultDate}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="commit-modal-section">
+                        <h4 class="commit-section-title">🏃 Training Profile</h4>
+                        <div class="commit-fields-grid">
+                            <div class="input-group">
+                                <label for="commitWeeklyVolume">Current Weekly Volume (km)</label>
+                                <input type="number" id="commitWeeklyVolume" placeholder="e.g. 40" step="1" min="0">
+                            </div>
+                            <div class="input-group">
+                                <label for="commitExperience">Running Experience</label>
+                                <select id="commitExperience">
+                                    <option value="beginner">Beginner (< 1 year)</option>
+                                    <option value="intermediate" selected>Intermediate (1-3 years)</option>
+                                    <option value="advanced">Advanced (3+ years)</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="commitTrainingDays">Training Days per Week</label>
+                                <select id="commitTrainingDays">
+                                    <option value="3">3 days</option>
+                                    <option value="4">4 days</option>
+                                    <option value="5" selected>5 days</option>
+                                    <option value="6">6 days</option>
+                                    <option value="7">7 days</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="commitLongestRun">Longest Recent Run (km)</label>
+                                <input type="number" id="commitLongestRun" placeholder="e.g. 18" step="0.5" min="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="commit-modal-section">
+                        <h4 class="commit-section-title">🎯 Goals</h4>
+                        <div class="commit-fields-grid">
+                            <div class="input-group">
+                                <label for="commitTargetTime">Target Race Time (optional)</label>
+                                <input type="text" id="commitTargetTime" placeholder="e.g. 3:30:00 or 1:45:00">
+                            </div>
+                            <div class="input-group" style="grid-column: 1 / -1;">
+                                <label for="commitNotes">Notes</label>
+                                <textarea id="commitNotes" rows="2" placeholder="Any relevant context — injuries, preferences, etc." style="resize: vertical; background: var(--surface-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; color: var(--text-main); font-family: var(--font-main); font-size: 0.95rem;"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancelCommitBtn">Cancel</button>
+                    <button class="btn-commit" id="confirmCommitBtn">🚀 Commit to Plan</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    document.getElementById('closeCommitModal').addEventListener('click', () => {
+        document.getElementById('commitModal').remove();
+    });
+    document.getElementById('cancelCommitBtn').addEventListener('click', () => {
+        document.getElementById('commitModal').remove();
+    });
+    document.getElementById('commitModal').addEventListener('click', (e) => {
+        if (e.target.id === 'commitModal') {
+            document.getElementById('commitModal').remove();
+        }
+    });
+
+    document.getElementById('confirmCommitBtn').addEventListener('click', handleCommitConfirm);
+}
+
+async function handleCommitConfirm() {
+    const planId = document.getElementById('planSelect').value;
+    const dateType = document.getElementById('commitDateType').value;
+    const dateValue = document.getElementById('commitDateValue').value;
+
+    if (!planId || !dateValue) {
+        alert('Please select a date.');
+        return;
+    }
+
+    if (!currentPlanWeeks || currentPlanWeeks.length === 0) {
+        alert('Wait for plan weeks to load.');
+        return;
+    }
+
+    // Collect metadata
+    const metadata = {
+        weeklyVolume: parseFloat(document.getElementById('commitWeeklyVolume').value) || null,
+        experience: document.getElementById('commitExperience').value,
+        trainingDays: parseInt(document.getElementById('commitTrainingDays').value),
+        longestRun: parseFloat(document.getElementById('commitLongestRun').value) || null,
+        targetTime: document.getElementById('commitTargetTime').value || null,
+        notes: document.getElementById('commitNotes').value || null
+    };
+
+    // Compute dates
+    const totalWeeks = currentPlanWeeks.length;
+    let startDate = new Date(dateValue);
+    let raceDate = null;
+
+    if (dateType === 'race') {
+        raceDate = new Date(dateValue);
+        startDate = new Date(dateValue);
+        startDate.setDate(startDate.getDate() - ((totalWeeks * 7) - 1));
+    } else {
+        raceDate = new Date(dateValue);
+        raceDate.setDate(raceDate.getDate() + (totalWeeks * 7) - 1);
+    }
+
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const raceDateStr = raceDate.toISOString().split('T')[0];
+
+    // Generate workouts
+    const generatedWorkouts = [];
+    let currentDay = new Date(startDate);
+    for (const week of currentPlanWeeks) {
+        const days = week.days;
+        for (let i = 0; i < 7; i++) {
+            const dayData = days[i];
+            generatedWorkouts.push({
+                scheduled_date: currentDay.toISOString().split('T')[0],
+                workout_type: dayData.type,
+                planned_data: dayData
+            });
+            currentDay.setDate(currentDay.getDate() + 1);
+        }
+    }
+
+    const btn = document.getElementById('confirmCommitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Committing...';
+
+    const { error } = await commitToPlan(currentUser.id, planId, generatedWorkouts, {
+        startDate: startDateStr,
+        raceDate: raceDateStr,
+        metadata
+    });
+
+    if (!error) {
+        committedPlanId = planId;
+        document.getElementById('commitModal')?.remove();
+        await renderCommitButton();
+    } else {
+        alert('Error committing to plan.');
+        btn.disabled = false;
+        btn.textContent = '🚀 Commit to Plan';
     }
 }
 
@@ -1929,6 +2083,200 @@ async function renderUserSchedule(commitId) {
         document.getElementById('tickOffDetails').style.display = 'block';
         document.getElementById('tickOffModal').classList.add('active');
     };
+}
+// ─── Progress Analytics ───
+async function renderProgressAnalytics(commitId) {
+    if (!currentUser) return;
+    const workouts = await loadUserWorkouts(currentUser.id, commitId);
+    if (!workouts || workouts.length === 0) return;
+
+    const unit = document.getElementById('units').value;
+    const factor = unit === 'mi' ? 0.621371 : 1;
+
+    // Group workouts by week (every 7 days)
+    const weekMap = {};
+    workouts.forEach((w, i) => {
+        const weekNum = Math.floor(i / 7) + 1;
+        if (!weekMap[weekNum]) weekMap[weekNum] = [];
+        weekMap[weekNum].push(w);
+    });
+
+    const weekNums = Object.keys(weekMap).map(Number).sort((a, b) => a - b);
+    const labels = weekNums.map(n => `Week ${n}`);
+
+    // Calculate planned and actual volume per week
+    const plannedVolumes = [];
+    const actualVolumes = [];
+    let cumulativePlanned = 0;
+    let cumulativeActual = 0;
+    const cumulativePlannedArr = [];
+    const cumulativeActualArr = [];
+    const completedCounts = [];
+    const skippedCounts = [];
+    const remainingCounts = [];
+
+    weekNums.forEach(weekNum => {
+        const weekWorkouts = weekMap[weekNum];
+        let plannedVol = 0;
+        let actualVol = 0;
+        let completed = 0, skipped = 0, remaining = 0;
+
+        weekWorkouts.forEach(w => {
+            // Planned distance from planned_data
+            const pDist = w.planned_data?.dist || w.planned_data?.stats?.total || 0;
+            plannedVol += pDist;
+
+            if (w.status === 'COMPLETED') {
+                completed++;
+                const aDist = parseFloat(w.actual_data?.distance) || pDist;
+                actualVol += aDist;
+            } else if (w.status === 'SKIPPED') {
+                skipped++;
+            } else {
+                remaining++;
+            }
+        });
+
+        plannedVolumes.push(+(plannedVol * factor).toFixed(1));
+        actualVolumes.push(+(actualVol * factor).toFixed(1));
+        cumulativePlanned += plannedVol;
+        cumulativeActual += actualVol;
+        cumulativePlannedArr.push(+(cumulativePlanned * factor).toFixed(1));
+        cumulativeActualArr.push(+(cumulativeActual * factor).toFixed(1));
+        completedCounts.push(completed);
+        skippedCounts.push(skipped);
+        remainingCounts.push(remaining);
+    });
+
+    // Chart defaults
+    Chart.defaults.color = '#98989D';
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
+
+    // --- Chart 1: Planned vs Actual Volume ---
+    if (volumeCompChart) volumeCompChart.destroy();
+    const ctx1 = document.getElementById('volumeComparisonChart');
+    if (ctx1) {
+        volumeCompChart = new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: `Planned (${unit})`,
+                        data: plannedVolumes,
+                        backgroundColor: 'rgba(10, 132, 255, 0.35)',
+                        borderColor: '#0A84FF',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: `Actual (${unit})`,
+                        data: actualVolumes,
+                        backgroundColor: 'rgba(48, 209, 88, 0.35)',
+                        borderColor: '#30D158',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { color: '#98989D', boxWidth: 12 } },
+                    tooltip: { padding: 10, backgroundColor: 'rgba(44,44,46,0.95)', titleColor: '#F5F5F7', bodyColor: '#F5F5F7' }
+                },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#636366' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: `Distance (${unit})`, color: '#636366' }, ticks: { color: '#636366' } }
+                }
+            }
+        });
+    }
+
+    // --- Chart 2: Cumulative Distance ---
+    if (cumulativeChart) cumulativeChart.destroy();
+    const ctx2 = document.getElementById('cumulativeDistanceChart');
+    if (ctx2) {
+        cumulativeChart = new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Planned Cumulative',
+                        data: cumulativePlannedArr,
+                        borderColor: '#0A84FF',
+                        backgroundColor: 'rgba(10, 132, 255, 0.1)',
+                        fill: true, borderWidth: 2, tension: 0.3,
+                        pointBackgroundColor: '#1C1C1E', pointBorderColor: '#0A84FF'
+                    },
+                    {
+                        label: 'Actual Cumulative',
+                        data: cumulativeActualArr,
+                        borderColor: '#30D158',
+                        backgroundColor: 'rgba(48, 209, 88, 0.1)',
+                        fill: true, borderWidth: 2, tension: 0.3,
+                        pointBackgroundColor: '#1C1C1E', pointBorderColor: '#30D158'
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { color: '#98989D', boxWidth: 12 } },
+                    tooltip: { padding: 10, backgroundColor: 'rgba(44,44,46,0.95)', titleColor: '#F5F5F7', bodyColor: '#F5F5F7' }
+                },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#636366' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: `Cumulative (${unit})`, color: '#636366' }, ticks: { color: '#636366' } }
+                }
+            }
+        });
+    }
+
+    // --- Chart 3: Completion Rate ---
+    if (completionChart) completionChart.destroy();
+    const ctx3 = document.getElementById('completionRateChart');
+    if (ctx3) {
+        completionChart = new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Completed',
+                        data: completedCounts,
+                        backgroundColor: 'rgba(48, 209, 88, 0.6)',
+                        borderRadius: 3
+                    },
+                    {
+                        label: 'Skipped',
+                        data: skippedCounts,
+                        backgroundColor: 'rgba(255, 69, 58, 0.5)',
+                        borderRadius: 3
+                    },
+                    {
+                        label: 'Remaining',
+                        data: remainingCounts,
+                        backgroundColor: 'rgba(152, 152, 157, 0.25)',
+                        borderRadius: 3
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: {
+                    legend: { position: 'top', labels: { color: '#98989D', boxWidth: 12 } },
+                    tooltip: { padding: 10, backgroundColor: 'rgba(44,44,46,0.95)', titleColor: '#F5F5F7', bodyColor: '#F5F5F7' }
+                },
+                scales: {
+                    x: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#636366', stepSize: 1 }, title: { display: true, text: 'Sessions', color: '#636366' } },
+                    y: { stacked: true, grid: { display: false }, ticks: { color: '#636366' } }
+                }
+            }
+        });
+    }
 }
 
 // ─── Timeline ───
@@ -2468,7 +2816,7 @@ async function init() {
         distFilter.addEventListener('change', () => renderTimelineChart());
     }
 
-    const inputs = ['raceDistance', 'raceTime', 'units', 'raceDate', 'pb5k', 'pb10k', 'pbHalf', 'pbMarathon', 'goalTime'];
+    const inputs = ['raceDistance', 'raceTime', 'units', 'pb5k', 'pb10k', 'pbHalf', 'pbMarathon', 'goalTime'];
     inputs.forEach(id => {
         const el = document.getElementById(id);
         if (el) {

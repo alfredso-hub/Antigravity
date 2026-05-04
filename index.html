@@ -163,11 +163,6 @@
                             </select>
                         </div>
 
-                        <div class="input-group">
-                            <label for="raceDate">Race Date</label>
-                            <input type="date" id="raceDate" value="2026-05-10">
-                        </div>
-
                         <div class="input-group commit-group">
                             <label>Plan Status</label>
                             <div id="commitBtnContainer"></div>
@@ -179,6 +174,39 @@
                     <div style="position: relative; height:300px; width:100%;">
                         <canvas id="planChart"></canvas>
                     </div>
+                </div>
+
+                <!-- Collapsible Progress Analytics (shown when committed) -->
+                <div id="progressAnalyticsWrapper" style="display: none;">
+                    <details class="analytics-collapsible">
+                        <summary class="analytics-summary">
+                            <span class="analytics-icon">📈</span>
+                            Progress Analytics
+                            <span class="analytics-hint">Click to expand</span>
+                        </summary>
+                        <div class="analytics-content">
+                            <div class="analytics-grid">
+                                <div class="analytics-chart-card">
+                                    <h4>Planned vs Actual Weekly Volume</h4>
+                                    <div class="analytics-chart-container">
+                                        <canvas id="volumeComparisonChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="analytics-chart-card">
+                                    <h4>Cumulative Distance</h4>
+                                    <div class="analytics-chart-container">
+                                        <canvas id="cumulativeDistanceChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="analytics-chart-card" style="margin-top: 16px;">
+                                <h4>Completion Rate by Week</h4>
+                                <div class="analytics-chart-container" style="height: auto; min-height: 120px;">
+                                    <canvas id="completionRateChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
                 <div id="planContainer" class="weeks-container">
