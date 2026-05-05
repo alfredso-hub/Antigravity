@@ -9,7 +9,7 @@ import {
     loadAdminStatus, loadUserEvents, createUserEvent, updateUserEvent,
     deleteUserEvent, commitToPlan, uncommitFromPlan, getCommittedPlan,
     loadUserWorkouts, updateUserWorkout, createPlanAdjustment, wipeSandboxData,
-    deletePlan, updatePlanWeek
+    deletePlan, updatePlanWeek, updateCommitHealthMode
 } from './db.js';
 import { runAdjustmentEngine } from './engine/adjustment.js';
 
@@ -594,20 +594,41 @@ async function renderPlan() {
             currentWorkoutsMap[w.scheduled_date] = w;
         });
 
+        // Check for active health mode
+        const healthMode = committedPlanData.commit_metadata?.health_mode;
+        if (healthMode) {
+            const since = new Date(healthMode.since).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+            const emoji = healthMode.mode === 'sick' ? '🤒' : '🩹';
+            const label = healthMode.mode === 'sick' ? 'sick' : 'injured';
+            const color = healthMode.mode === 'sick' ? 'var(--accent-orange)' : 'var(--accent-red)';
+            const bannerHtml = `
+                <div class="health-mode-banner" style="border-color: ${color};">
+                    <span>${emoji}</span>
+                    <div>
+                        <strong>You've been ${label} since ${since}.</strong>
+                        <span style="color: var(--text-secondary);">Click any day to mark your last ${label} day.</span>
+                    </div>
+                </div>`;
+            document.getElementById('planContainer').insertAdjacentHTML('afterbegin', bannerHtml);
+        }
+
         // Add status badges and click handlers to day cells
         document.querySelectorAll('.day-cell').forEach(cell => {
             const weekNum = parseInt(cell.dataset.week);
             const dayIdx = parseInt(cell.dataset.day);
 
-            // Compute scheduled date for this cell
             if (hasDates && planStartDate) {
                 const cellDate = new Date(planStartDate);
                 cellDate.setDate(planStartDate.getDate() + (weekNum - 1) * 7 + dayIdx);
                 const dateKey = cellDate.toISOString().split('T')[0];
                 const workout = currentWorkoutsMap[dateKey];
 
+                // Paused overlay during health mode for future unlogged days
+                if (healthMode && workout && workout.status === 'PLANNED' && dateKey > healthMode.since) {
+                    cell.classList.add('day-paused');
+                }
+
                 if (workout) {
-                    // Add status badge
                     if (workout.status === 'COMPLETED') {
                         cell.classList.add('day-completed');
                         const badge = document.createElement('div');
@@ -624,7 +645,6 @@ async function renderPlan() {
                         cell.classList.add('day-planned');
                     }
 
-                    // Make clickable
                     cell.classList.add('day-clickable');
                     cell.style.cursor = 'pointer';
                     const week = currentPlanWeeks.find(w => w.week_number === weekNum);
@@ -1985,13 +2005,18 @@ function openWorkoutLogModal(workout, dayData) {
     const existing = document.getElementById('workoutLogModal');
     if (existing) existing.remove();
 
+    // Check if we're in health mode — show recovery modal instead
+    const healthMode = committedPlanData?.commit_metadata?.health_mode;
+    if (healthMode) {
+        openRecoveryModal(workout, healthMode);
+        return;
+    }
+
     const unit = document.getElementById('units').value;
     const plannedDist = dayData?.dist || dayData?.stats?.total || '';
     const typeName = dayData?.type || workout.workout_type || '';
     const typeClass = dayData?.class || 'easy';
     const dateStr = new Date(workout.scheduled_date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-
-    // Pre-fill from existing actual_data
     const ad = workout.actual_data || {};
     const currentStatus = workout.status || 'PLANNED';
 
@@ -2044,6 +2069,14 @@ function openWorkoutLogModal(workout, dayData) {
                                     <label for="wlTime">Time (hh:mm:ss)</label>
                                     <input type="text" id="wlTime" placeholder="e.g. 55:00 or 1:02:30" value="${ad.time || ''}">
                                 </div>
+                                <div class="input-group">
+                                    <label for="wlAvgHR">Avg Heart Rate (bpm)</label>
+                                    <input type="number" id="wlAvgHR" min="30" max="250" placeholder="e.g. 145" value="${ad.avgHR || ''}">
+                                </div>
+                                <div class="input-group">
+                                    <label for="wlMaxHR">Max Heart Rate (bpm)</label>
+                                    <input type="number" id="wlMaxHR" min="30" max="250" placeholder="e.g. 172" value="${ad.maxHR || ''}">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2051,7 +2084,7 @@ function openWorkoutLogModal(workout, dayData) {
                     <div class="commit-modal-section">
                         <h4 class="commit-section-title">💪 How are you feeling?</h4>
                         <div class="commit-fields-grid">
-                            <div class="input-group">
+                            <div class="input-group" style="grid-column: 1 / -1;">
                                 <label for="wlHealth">Health Status</label>
                                 <select id="wlHealth">
                                     <option value="healthy" ${(ad.health || 'healthy') === 'healthy' ? 'selected' : ''}>😊 Healthy</option>
@@ -2059,10 +2092,6 @@ function openWorkoutLogModal(workout, dayData) {
                                     <option value="sick" ${ad.health === 'sick' ? 'selected' : ''}>🤒 Sick</option>
                                     <option value="injured" ${ad.health === 'injured' ? 'selected' : ''}>🩹 Injured</option>
                                 </select>
-                            </div>
-                            <div class="input-group" id="wlHealthEndGroup" style="display: none;">
-                                <label for="wlHealthEnd">Expected Recovery Date</label>
-                                <input type="date" id="wlHealthEnd">
                             </div>
                         </div>
                         <div id="wlHealthNote" style="display: none; margin-top: 10px; padding: 10px; border-radius: var(--radius-sm); font-size: 0.82rem; line-height: 1.4;"></div>
@@ -2084,32 +2113,25 @@ function openWorkoutLogModal(workout, dayData) {
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-    // Toggle completed fields visibility
+    // Toggle completed fields
     const statusSel = document.getElementById('wlStatus');
     const completedFields = document.getElementById('wlCompletedFields');
-    const toggleCompletedFields = () => {
+    statusSel.addEventListener('change', () => {
         completedFields.style.display = statusSel.value === 'COMPLETED' ? 'block' : 'none';
-    };
-    statusSel.addEventListener('change', toggleCompletedFields);
-    toggleCompletedFields();
+    });
+    completedFields.style.display = statusSel.value === 'COMPLETED' ? 'block' : 'none';
 
-    // Toggle health end date & warning
+    // Health note toggle
     const healthSel = document.getElementById('wlHealth');
-    const healthEndGroup = document.getElementById('wlHealthEndGroup');
     const healthNote = document.getElementById('wlHealthNote');
     const toggleHealth = () => {
         const val = healthSel.value;
-        const showEnd = val === 'sick' || val === 'injured';
-        healthEndGroup.style.display = showEnd ? 'block' : 'none';
-        if (showEnd) {
-            const defaultEnd = new Date(workout.scheduled_date);
-            defaultEnd.setDate(defaultEnd.getDate() + (val === 'sick' ? 5 : 10));
-            document.getElementById('wlHealthEnd').value = defaultEnd.toISOString().split('T')[0];
-            const label = val === 'sick' ? 'sickness' : 'injury';
+        if (val === 'sick' || val === 'injured') {
+            const label = val === 'sick' ? 'sick' : 'injured';
             healthNote.style.display = 'block';
             healthNote.style.background = val === 'sick' ? 'rgba(255,159,10,0.1)' : 'rgba(255,69,58,0.1)';
             healthNote.style.color = val === 'sick' ? 'var(--accent-orange)' : 'var(--accent-red)';
-            healthNote.innerHTML = `⚠️ A ${label} event will be created and your training plan will be <strong>automatically adjusted</strong> for the recovery period.`;
+            healthNote.innerHTML = `Your plan will enter <strong>${label} mode</strong>. When you're healthy again, click any day to mark your last ${label} day and your plan will be adjusted.`;
         } else {
             healthNote.style.display = 'none';
         }
@@ -2124,7 +2146,6 @@ function openWorkoutLogModal(workout, dayData) {
         if (e.target.id === 'workoutLogModal') document.getElementById('workoutLogModal').remove();
     });
 
-    // Save handler
     document.getElementById('saveWorkoutLog').addEventListener('click', () => handleWorkoutLogSave(workout));
 }
 
@@ -2139,13 +2160,14 @@ async function handleWorkoutLogSave(workout) {
     if (status === 'COMPLETED') {
         actualData.distance = document.getElementById('wlDistance').value || null;
         actualData.time = document.getElementById('wlTime').value || null;
+        actualData.avgHR = document.getElementById('wlAvgHR').value || null;
+        actualData.maxHR = document.getElementById('wlMaxHR').value || null;
     }
 
     const btn = document.getElementById('saveWorkoutLog');
     btn.disabled = true;
     btn.textContent = 'Saving...';
 
-    // Save the workout
     const { error } = await updateUserWorkout(workout.id, { status, actual_data: actualData });
     if (error) {
         alert('Error saving workout.');
@@ -2154,48 +2176,216 @@ async function handleWorkoutLogSave(workout) {
         return;
     }
 
-    // If sick or injured, create a health event and trigger adjustment engine
+    // If sick or injured, enter health mode (no immediate adjustment)
     const healthVal = actualData.health;
     if (healthVal === 'sick' || healthVal === 'injured') {
-        const endDate = document.getElementById('wlHealthEnd').value;
-        const eventType = healthVal === 'sick' ? 'sickness' : 'injury';
-
-        // Create health event
-        await createUserEvent({
-            user_id: currentUser.id,
-            event_type: eventType,
-            start_date: workout.scheduled_date,
-            end_date: endDate || workout.scheduled_date,
-            notes: `Reported during workout log`
+        await updateCommitHealthMode(currentUser.id, {
+            mode: healthVal,
+            since: workout.scheduled_date
         });
-
-        // Trigger adjustment engine
-        if (committedPlanData) {
-            const allWorkouts = await loadUserWorkouts(currentUser.id, committedPlanData.id);
-            const adjusted = runAdjustmentEngine(allWorkouts, {
-                event_type: eventType,
-                start_date: workout.scheduled_date,
-                end_date: endDate || workout.scheduled_date
-            });
-
-            if (adjusted && adjusted.length > 0) {
-                for (const adjW of adjusted) {
-                    await updateUserWorkout(adjW.id, {
-                        workout_type: adjW.workout_type,
-                        planned_data: adjW.planned_data,
-                        actual_data: adjW.actual_data || {}
-                    });
-                }
-                alert(`Your plan has been automatically adjusted for your ${eventType}.`);
-            }
-        }
-
-        // Refresh events for timeline
-        allUserEvents = await loadUserEvents(currentUser.id);
     }
 
     document.getElementById('workoutLogModal')?.remove();
-    await renderCommitButton(); // Refresh plan + analytics
+    await renderCommitButton();
+}
+
+// ─── Recovery Modal (Mark Last Sick/Injured Day) ───
+function openRecoveryModal(workout, healthMode) {
+    const existing = document.getElementById('workoutLogModal');
+    if (existing) existing.remove();
+
+    const mode = healthMode.mode;
+    const since = new Date(healthMode.since).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+    const dateStr = new Date(workout.scheduled_date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    const emoji = mode === 'sick' ? '🤒' : '🩹';
+    const color = mode === 'sick' ? 'var(--accent-orange)' : 'var(--accent-red)';
+
+    const modalHtml = `
+        <div class="modal active" id="workoutLogModal">
+            <div class="modal-content commit-modal-content">
+                <div class="modal-header">
+                    <h3>${emoji} Recovery</h3>
+                    <button class="close-modal" id="closeRecoveryModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div style="text-align: center; padding: 20px 0;">
+                        <div style="font-size: 2.5rem; margin-bottom: 12px;">${emoji}</div>
+                        <p style="color: var(--text-main); font-size: 1.05rem; font-weight: 600; margin-bottom: 8px;">
+                            You've been ${mode} since ${since}
+                        </p>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                            Is <strong>${dateStr}</strong> your last ${mode} day?<br>
+                            Your plan will be adjusted for your return.
+                        </p>
+                    </div>
+                </div>
+                <div class="modal-footer" style="justify-content: center; gap: 12px;">
+                    <button class="btn btn-secondary" id="cancelRecovery">Not yet</button>
+                    <button class="btn-commit" id="confirmRecovery" style="background: linear-gradient(135deg, ${color}, ${mode === 'sick' ? '#e68a00' : '#cc3a30'});">
+                        ✓ Mark as Last ${mode === 'sick' ? 'Sick' : 'Injured'} Day
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    document.getElementById('closeRecoveryModal').addEventListener('click', () => document.getElementById('workoutLogModal').remove());
+    document.getElementById('cancelRecovery').addEventListener('click', () => document.getElementById('workoutLogModal').remove());
+    document.getElementById('workoutLogModal').addEventListener('click', (e) => {
+        if (e.target.id === 'workoutLogModal') document.getElementById('workoutLogModal').remove();
+    });
+
+    document.getElementById('confirmRecovery').addEventListener('click', () => handleRecoveryConfirm(workout, healthMode));
+}
+
+async function handleRecoveryConfirm(workout, healthMode) {
+    const btn = document.getElementById('confirmRecovery');
+    btn.disabled = true;
+    btn.textContent = 'Adjusting plan...';
+
+    const eventType = healthMode.mode === 'sick' ? 'sickness' : 'injury';
+    const startDate = healthMode.since;
+    const endDate = workout.scheduled_date;
+
+    // Create health event for the full range
+    await createUserEvent({
+        user_id: currentUser.id,
+        event_type: eventType,
+        start_date: startDate,
+        end_date: endDate,
+        notes: `${eventType} period (auto-logged)`
+    });
+
+    // Run adjustment engine with correct 3-arg signature
+    let adjustmentResult = null;
+    if (committedPlanData) {
+        const allWorkouts = await loadUserWorkouts(currentUser.id, committedPlanData.id);
+        // Only adjust workouts AFTER the last sick day
+        const futureWorkouts = allWorkouts.filter(w => w.scheduled_date > endDate && w.status === 'PLANNED');
+
+        if (futureWorkouts.length > 0) {
+            const vdot = getVDOT() || 50;
+            adjustmentResult = runAdjustmentEngine({ vdot }, {
+                reason: eventType,
+                startDate: startDate,
+                endDate: endDate
+            }, futureWorkouts);
+
+            // Save adjustment log
+            await createPlanAdjustment({
+                user_id: currentUser.id,
+                event_reason: eventType,
+                state_before: adjustmentResult.athleteStateBefore,
+                state_after: adjustmentResult.athleteStateAfter,
+                schedule_adjustments: adjustmentResult.scheduleAdjustments
+            });
+
+            // Apply adjusted workouts
+            for (const adjW of adjustmentResult.scheduleAdjustments.adjustedWorkouts) {
+                await updateUserWorkout(adjW.id, {
+                    workout_type: adjW.workout_type,
+                    planned_data: adjW.planned_data,
+                    actual_data: adjW.actual_data || {}
+                });
+            }
+        }
+    }
+
+    // Clear health mode
+    await updateCommitHealthMode(currentUser.id, null);
+
+    // Refresh events
+    allUserEvents = await loadUserEvents(currentUser.id);
+
+    document.getElementById('workoutLogModal')?.remove();
+
+    // Show Welcome Back modal
+    showWelcomeBackModal(adjustmentResult, healthMode);
+
+    await renderCommitButton();
+}
+
+function showWelcomeBackModal(adjustmentResult, healthMode) {
+    const existing = document.getElementById('welcomeBackModal');
+    if (existing) existing.remove();
+
+    const mode = healthMode.mode;
+    const since = new Date(healthMode.since);
+    const now = new Date();
+    const daysMissed = Math.floor((now - since) / (1000 * 60 * 60 * 24));
+
+    let rulesHtml = '';
+    let changesHtml = '';
+
+    if (adjustmentResult?.scheduleAdjustments) {
+        const sa = adjustmentResult.scheduleAdjustments;
+        const rules = sa.rulesApplied || [];
+        if (rules.length > 0) {
+            rulesHtml = `
+                <div style="margin-top: 16px;">
+                    <div style="font-size: 0.78rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Rules Applied</div>
+                    ${rules.map(r => `<div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.88rem; color: var(--text-secondary);">
+                        <span style="color: var(--primary);">•</span> ${r}
+                    </div>`).join('')}
+                </div>`;
+        }
+
+        const adjusted = sa.adjustedWorkouts || [];
+        const modified = adjusted.filter(w => w.actual_data?.rulesApplied?.length > 0);
+        if (modified.length > 0) {
+            changesHtml = `
+                <div style="margin-top: 16px;">
+                    <div style="font-size: 0.78rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Modified Workouts</div>
+                    <div style="font-size: 0.88rem; color: var(--text-secondary);">
+                        ${modified.length} session${modified.length > 1 ? 's' : ''} adjusted — quality sessions converted to easy/recovery, volume reduced to 75%.
+                    </div>
+                </div>`;
+        }
+
+        if (sa.intensityLockExpiration) {
+            const lockDate = new Date(sa.intensityLockExpiration).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+            changesHtml += `
+                <div style="margin-top: 10px; padding: 10px; background: rgba(10,132,255,0.1); border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--primary);">
+                    🔒 Intensity locked until <strong>${lockDate}</strong> — keep runs easy during the bridge phase.
+                </div>`;
+        }
+    }
+
+    const modalHtml = `
+        <div class="modal active" id="welcomeBackModal">
+            <div class="modal-content commit-modal-content">
+                <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+                    <h3></h3>
+                    <button class="close-modal" id="closeWelcomeBack">✕</button>
+                </div>
+                <div class="modal-body" style="text-align: center;">
+                    <div style="font-size: 3rem; margin-bottom: 12px;">🎉</div>
+                    <h3 style="font-size: 1.3rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">Welcome Back!</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 4px;">
+                        You were ${mode} for <strong>${daysMissed} day${daysMissed !== 1 ? 's' : ''}</strong>.
+                    </p>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Your plan has been adjusted to get you back safely.
+                    </p>
+                    ${rulesHtml}
+                    ${changesHtml}
+                    <div style="margin-top: 24px; padding: 14px; background: linear-gradient(135deg, rgba(48,209,88,0.1), rgba(10,132,255,0.1)); border-radius: var(--radius-md); border: 1px solid rgba(48,209,88,0.2);">
+                        <p style="color: var(--accent-green); font-size: 0.9rem; font-weight: 500; margin: 0;">
+                            💪 Ease back in — listen to your body and follow the adjusted plan.
+                        </p>
+                    </div>
+                </div>
+                <div class="modal-footer" style="justify-content: center; border-top: none;">
+                    <button class="btn-commit" id="welcomeBackDismiss" style="padding: 12px 40px; font-size: 1rem;">Let's Go 🚀</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    document.getElementById('closeWelcomeBack').addEventListener('click', () => document.getElementById('welcomeBackModal').remove());
+    document.getElementById('welcomeBackDismiss').addEventListener('click', () => document.getElementById('welcomeBackModal').remove());
 }
 
 // ─── Progress Analytics ───

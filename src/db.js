@@ -284,6 +284,32 @@ export async function getCommittedPlan(userId) {
     return data;
 }
 
+export async function updateCommitHealthMode(userId, healthMode) {
+    // healthMode: { mode: 'sick'|'injured', since: 'YYYY-MM-DD' } or null to clear
+    const { data: existing } = await supabase
+        .from('user_plan_commits')
+        .select('commit_metadata')
+        .eq('user_id', userId)
+        .single();
+
+    const metadata = existing?.commit_metadata || {};
+    if (healthMode) {
+        metadata.health_mode = healthMode;
+    } else {
+        delete metadata.health_mode;
+    }
+
+    const { error } = await supabase
+        .from('user_plan_commits')
+        .update({ commit_metadata: metadata })
+        .eq('user_id', userId);
+
+    if (error) {
+        console.error('Error updating health mode:', error);
+    }
+    return { error };
+}
+
 // ─── Admin: Delete a plan ───
 export async function deletePlan(planId) {
     const { error } = await supabase

@@ -561,6 +561,41 @@ select:focus {
     opacity: 1;
 }
 
+.day-paused {
+    opacity: 0.35;
+    background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 4px,
+        rgba(152, 152, 157, 0.08) 4px,
+        rgba(152, 152, 157, 0.08) 8px
+    ) !important;
+}
+
+.day-paused:hover {
+    opacity: 0.7 !important;
+}
+
+/* ═══ Health Mode Banner ═══ */
+.health-mode-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    margin-bottom: 16px;
+    background: var(--surface-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    border-left: 4px solid;
+    font-size: 0.92rem;
+    color: var(--text-main);
+    animation: fadeInDown 0.3s ease-out;
+}
+
+.health-mode-banner span:first-child {
+    font-size: 1.5rem;
+}
+
 /* ═══════════════════════════════════════════════
    Create Plan – Day Editor
    ═══════════════════════════════════════════════ */
