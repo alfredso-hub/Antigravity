@@ -48,6 +48,9 @@
                 <button class="tab-btn" data-tab="createPlanTab">
                     <span class="tab-icon">✨</span> Create Plan
                 </button>
+                <button class="tab-btn" data-tab="racePlannerTab">
+                    <span class="tab-icon">🏁</span> Race Planner
+                </button>
             </div>
 
             <!-- ═══ MY PACES TAB ═══ -->
@@ -352,6 +355,118 @@
                         </div>
                     </form>
                 </div>
+            </div>
+
+            <!-- ═══ RACE PLANNER TAB ═══ -->
+            <div id="racePlannerTab" class="tab-content">
+
+                <!-- ── Pace Planner ── -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <h2 class="section-title">🏃 Pace Planner</h2>
+                    <p style="color:var(--text-secondary);margin-bottom:20px;">Set a target time and get your km splits and average pace.</p>
+
+                    <div class="controls-grid" style="margin-bottom: 20px;">
+                        <div class="input-group">
+                            <label for="raceDistance">Race Distance</label>
+                            <select id="raceDistance">
+                                <option value="5">5 km</option>
+                                <option value="10">10 km</option>
+                                <option value="21.0975" selected>Half Marathon (21.1 km)</option>
+                                <option value="42.195">Marathon (42.2 km)</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="input-group" id="customDistanceGroup" style="display:none;">
+                            <label for="customRaceDistance">Custom Distance (km)</label>
+                            <input type="number" id="customRaceDistance" step="0.1" min="0.1" placeholder="e.g. 15">
+                        </div>
+                        <div class="input-group">
+                            <label for="raceTargetTime">Target Time (hh:mm:ss)</label>
+                            <input type="text" id="raceTargetTime" placeholder="e.g. 1:45:00 or 45:00">
+                        </div>
+                        <div class="input-group">
+                            <label for="raceSplitStrategy">Split Strategy</label>
+                            <select id="raceSplitStrategy">
+                                <option value="even">Even splits</option>
+                                <option value="negative">Negative splits (−2%)</option>
+                                <option value="positive">Positive splits (+2%)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" id="calcPaceBtn" style="margin-bottom: 24px;">Calculate Splits</button>
+
+                    <div id="pacePlannerResult" style="display:none;">
+                        <div id="paceSummaryBar" class="pace-summary-bar"></div>
+                        <div style="overflow-x:auto;">
+                            <table class="splits-table" id="splitsTable">
+                                <thead>
+                                    <tr>
+                                        <th>KM</th>
+                                        <th>Split Pace</th>
+                                        <th>Elapsed Time</th>
+                                        <th>Distance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="splitsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Nutrition Planner ── -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <h2 class="section-title">🧃 Race Nutrition</h2>
+                    <p style="color:var(--text-secondary);margin-bottom:20px;">Plan your fuelling strategy. Add gels, drinks, or chews for each point in the race.</p>
+
+                    <!-- Pre-race entry -->
+                    <div class="nutrition-section-label">Pre-Race</div>
+                    <div id="preRaceNutritionList" class="nutrition-list">
+                        <!-- Pre-race entries rendered here -->
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="addPreRaceBtn" style="margin-bottom: 24px; margin-top: 8px;">+ Add Pre-Race Item</button>
+
+                    <!-- During race -->
+                    <div class="nutrition-section-label">During Race</div>
+                    <div id="raceNutritionList" class="nutrition-list">
+                        <!-- Race entries rendered here -->
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="addRaceNutritionBtn" style="margin-top: 8px;">+ Add Item</button>
+
+                    <!-- Totals -->
+                    <div id="nutritionTotals" class="nutrition-totals" style="display:none; margin-top: 24px;">
+                        <div class="nutrition-section-label">Totals</div>
+                        <div class="nutrition-totals-grid">
+                            <div class="nutrition-total-card">
+                                <div class="nutrition-total-value" id="totalCarbs">0</div>
+                                <div class="nutrition-total-label">Carbs (g)</div>
+                            </div>
+                            <div class="nutrition-total-card">
+                                <div class="nutrition-total-value" id="totalCaffeine">0</div>
+                                <div class="nutrition-total-label">Caffeine (mg)</div>
+                            </div>
+                            <div class="nutrition-total-card">
+                                <div class="nutrition-total-value" id="totalSodium">0</div>
+                                <div class="nutrition-total-label">Sodium (mg)</div>
+                            </div>
+                            <div class="nutrition-total-card">
+                                <div class="nutrition-total-value" id="totalItems">0</div>
+                                <div class="nutrition-total-label">Items</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Carb Loading ── -->
+                <div class="card">
+                    <h2 class="section-title">🍝 Carb Loading</h2>
+                    <div class="coming-soon-placeholder">
+                        <div class="coming-soon-icon">🚧</div>
+                        <p class="coming-soon-text">Coming soon...</p>
+                        <p style="color:var(--text-tertiary);font-size:0.85rem;">Plan your carbohydrate intake in the days leading up to race day.</p>
+                    </div>
+                </div>
+
             </div>
 
         </div>

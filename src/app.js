@@ -3181,3 +3181,309 @@ async function init() {
 }
 
 init();
+initRacePlanner();
+
+// ═══════════════════════════════════════════════
+// Race Planner
+// ═══════════════════════════════════════════════
+
+// ─── State ───
+const racePlanner = {
+    preRaceItems: [],
+    raceItems: [],
+    nextId: 1
+};
+
+// ─── Pace Planner ───
+
+function parseRaceTargetTime(str) {
+    // Accepts h:mm:ss, mm:ss, or seconds
+    if (!str) return null;
+    const parts = str.trim().split(':').map(Number);
+    if (parts.some(isNaN)) return null;
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 1) return parts[0];
+    return null;
+}
+
+function formatPace(secondsPerKm) {
+    // Returns mm:ss.00
+    const mins = Math.floor(secondsPerKm / 60);
+    const secs = secondsPerKm % 60;
+    const wholeS = Math.floor(secs);
+    const hundredths = Math.round((secs - wholeS) * 100);
+    return `${mins}:${String(wholeS).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
+}
+
+function formatElapsed(totalSeconds) {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = Math.floor(totalSeconds % 60);
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function calcSplits() {
+    const distSel = document.getElementById('raceDistance');
+    const targetInput = document.getElementById('raceTargetTime');
+    const strategy = document.getElementById('raceSplitStrategy').value;
+
+    let totalKm = distSel.value === 'custom'
+        ? parseFloat(document.getElementById('customRaceDistance').value)
+        : parseFloat(distSel.value);
+
+    const totalSecs = parseRaceTargetTime(targetInput.value);
+
+    if (!totalKm || !totalSecs || totalSecs <= 0) {
+        alert('Please enter a valid distance and target time.');
+        return;
+    }
+
+    const avgPacePerKm = totalSecs / totalKm;
+
+    // Build split list: whole km splits + final partial km
+    const splits = [];
+    const fullKms = Math.floor(totalKm);
+    const remainder = totalKm - fullKms;
+
+    // Strategy: apply a linear ramp. For negative splits, first half is slower.
+    // factor = how much first km deviates from avg, linearly scaling to opposite at end
+    const strategyFactor = strategy === 'negative' ? 1.02 : strategy === 'positive' ? 0.98 : 1.0;
+
+    let elapsed = 0;
+    for (let km = 1; km <= fullKms; km++) {
+        // Linear scale: at km=1, pace = avg * strategyFactor; at km=fullKms, pace = avg * (2 - strategyFactor)
+        const progress = (km - 0.5) / totalKm; // midpoint of this km
+        const paceFactor = strategyFactor + (2 - 2 * strategyFactor) * progress;
+        const kmPace = avgPacePerKm * paceFactor;
+        elapsed += kmPace;
+        splits.push({ km, dist: 1, pace: kmPace, elapsed });
+    }
+
+    // Last partial km
+    if (remainder > 0.001) {
+        const progress = (fullKms + remainder / 2) / totalKm;
+        const paceFactor = strategyFactor + (2 - 2 * strategyFactor) * progress;
+        const kmPace = avgPacePerKm * paceFactor;
+        const partialSecs = kmPace * remainder;
+        elapsed += partialSecs;
+        splits.push({ km: totalKm, dist: remainder, pace: kmPace, elapsed });
+    }
+
+    // Render summary bar
+    const distLabel = distSel.options[distSel.selectedIndex]?.text || `${totalKm} km`;
+    const summaryBar = document.getElementById('paceSummaryBar');
+    summaryBar.innerHTML = `
+        <div class="pace-summary-item">
+            <span class="pace-summary-value">${formatElapsed(totalSecs)}</span>
+            <span class="pace-summary-label">Target Time</span>
+        </div>
+        <div class="pace-summary-divider"></div>
+        <div class="pace-summary-item">
+            <span class="pace-summary-value">${formatPace(avgPacePerKm)}</span>
+            <span class="pace-summary-label">Avg Pace /km</span>
+        </div>
+        <div class="pace-summary-divider"></div>
+        <div class="pace-summary-item">
+            <span class="pace-summary-value">${totalKm} km</span>
+            <span class="pace-summary-label">${distLabel.replace(/\(.*\)/, '').trim()}</span>
+        </div>
+        <div class="pace-summary-divider"></div>
+        <div class="pace-summary-item">
+            <span class="pace-summary-value">${strategy === 'even' ? '〰' : strategy === 'negative' ? '📉→📈' : '📈→📉'}</span>
+            <span class="pace-summary-label">${strategy === 'even' ? 'Even splits' : strategy === 'negative' ? 'Negative splits' : 'Positive splits'}</span>
+        </div>
+    `;
+
+    // Render table
+    const tbody = document.getElementById('splitsTableBody');
+    tbody.innerHTML = '';
+    splits.forEach((s, i) => {
+        const isLast = i === splits.length - 1;
+        const distStr = isLast && s.dist < 0.999 ? `${(s.dist * 1000).toFixed(0)} m` : '1 km';
+        const tr = document.createElement('tr');
+        if (isLast && s.dist < 0.999) tr.className = 'split-partial';
+        tr.innerHTML = `
+            <td>${isLast && s.dist < 0.999 ? `${s.km.toFixed(3)} <span class="split-partial-tag">finish</span>` : s.km}</td>
+            <td class="split-pace">${formatPace(s.pace)}</td>
+            <td class="split-elapsed">${formatElapsed(s.elapsed)}</td>
+            <td class="split-dist">${distStr}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('pacePlannerResult').style.display = 'block';
+}
+
+// ─── Nutrition Planner ───
+
+function createNutritionEntry(isPreRace = false) {
+    const id = racePlanner.nextId++;
+    const entry = { id, isPreRace, name: '', carbs: 0, caffeine: 0, sodium: 0 };
+    if (isPreRace) {
+        entry.timeBefore = ''; // e.g. "15 min before start"
+    } else {
+        entry.km = '';
+    }
+    return entry;
+}
+
+function renderNutritionEntry(entry) {
+    const el = document.createElement('div');
+    el.className = 'nutrition-entry';
+    el.dataset.id = entry.id;
+
+    if (entry.isPreRace) {
+        el.innerHTML = `
+            <div class="nutrition-entry-grid">
+                <div class="input-group nutrition-timing">
+                    <label>Time Before Start</label>
+                    <div class="nutrition-timing-input">
+                        <input type="number" class="nutrition-time-val" min="1" placeholder="15" value="${entry.timeBefore || ''}" style="width:70px;">
+                        <span style="color:var(--text-secondary);font-size:0.88rem;">min before start</span>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Name / Product</label>
+                    <input type="text" class="nutrition-name" placeholder="e.g. Maurten Gel 100" value="${entry.name}">
+                </div>
+                <div class="input-group">
+                    <label>Carbs (g)</label>
+                    <input type="number" class="nutrition-carbs" min="0" step="1" placeholder="0" value="${entry.carbs || ''}">
+                </div>
+                <div class="input-group">
+                    <label>Caffeine (mg)</label>
+                    <input type="number" class="nutrition-caffeine" min="0" step="1" placeholder="0" value="${entry.caffeine || ''}">
+                </div>
+                <div class="input-group">
+                    <label>Sodium (mg)</label>
+                    <input type="number" class="nutrition-sodium" min="0" step="1" placeholder="0" value="${entry.sodium || ''}">
+                </div>
+                <div class="nutrition-remove-col">
+                    <button class="nutrition-remove-btn" title="Remove">✕</button>
+                </div>
+            </div>
+        `;
+    } else {
+        el.innerHTML = `
+            <div class="nutrition-entry-grid">
+                <div class="input-group nutrition-timing">
+                    <label>At KM</label>
+                    <input type="number" class="nutrition-km" min="0" step="0.5" placeholder="e.g. 15" value="${entry.km || ''}">
+                </div>
+                <div class="input-group">
+                    <label>Name / Product</label>
+                    <input type="text" class="nutrition-name" placeholder="e.g. SiS Beta Fuel" value="${entry.name}">
+                </div>
+                <div class="input-group">
+                    <label>Carbs (g)</label>
+                    <input type="number" class="nutrition-carbs" min="0" step="1" placeholder="0" value="${entry.carbs || ''}">
+                </div>
+                <div class="input-group">
+                    <label>Caffeine (mg)</label>
+                    <input type="number" class="nutrition-caffeine" min="0" step="1" placeholder="0" value="${entry.caffeine || ''}">
+                </div>
+                <div class="input-group">
+                    <label>Sodium (mg)</label>
+                    <input type="number" class="nutrition-sodium" min="0" step="1" placeholder="0" value="${entry.sodium || ''}">
+                </div>
+                <div class="nutrition-remove-col">
+                    <button class="nutrition-remove-btn" title="Remove">✕</button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Live update on input
+    el.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', () => {
+            syncEntryFromDOM(entry);
+            updateNutritionTotals();
+        });
+    });
+
+    // Remove
+    el.querySelector('.nutrition-remove-btn').addEventListener('click', () => {
+        if (entry.isPreRace) {
+            racePlanner.preRaceItems = racePlanner.preRaceItems.filter(e => e.id !== entry.id);
+        } else {
+            racePlanner.raceItems = racePlanner.raceItems.filter(e => e.id !== entry.id);
+        }
+        el.remove();
+        updateNutritionTotals();
+    });
+
+    return el;
+}
+
+function syncEntryFromDOM(entry) {
+    const el = document.querySelector(`.nutrition-entry[data-id="${entry.id}"]`);
+    if (!el) return;
+    entry.name = el.querySelector('.nutrition-name')?.value || '';
+    entry.carbs = parseFloat(el.querySelector('.nutrition-carbs')?.value) || 0;
+    entry.caffeine = parseFloat(el.querySelector('.nutrition-caffeine')?.value) || 0;
+    entry.sodium = parseFloat(el.querySelector('.nutrition-sodium')?.value) || 0;
+    if (entry.isPreRace) {
+        entry.timeBefore = el.querySelector('.nutrition-time-val')?.value || '';
+    } else {
+        entry.km = parseFloat(el.querySelector('.nutrition-km')?.value) || '';
+    }
+}
+
+function updateNutritionTotals() {
+    const allItems = [...racePlanner.preRaceItems, ...racePlanner.raceItems];
+    if (allItems.length === 0) {
+        document.getElementById('nutritionTotals').style.display = 'none';
+        return;
+    }
+
+    const totals = allItems.reduce((acc, e) => ({
+        carbs: acc.carbs + (e.carbs || 0),
+        caffeine: acc.caffeine + (e.caffeine || 0),
+        sodium: acc.sodium + (e.sodium || 0),
+        items: acc.items + 1
+    }), { carbs: 0, caffeine: 0, sodium: 0, items: 0 });
+
+    document.getElementById('totalCarbs').textContent = totals.carbs;
+    document.getElementById('totalCaffeine').textContent = totals.caffeine;
+    document.getElementById('totalSodium').textContent = totals.sodium;
+    document.getElementById('totalItems').textContent = totals.items;
+    document.getElementById('nutritionTotals').style.display = 'block';
+}
+
+function addPreRaceItem() {
+    const entry = createNutritionEntry(true);
+    racePlanner.preRaceItems.push(entry);
+    const el = renderNutritionEntry(entry);
+    document.getElementById('preRaceNutritionList').appendChild(el);
+    updateNutritionTotals();
+}
+
+function addRaceItem() {
+    const entry = createNutritionEntry(false);
+    racePlanner.raceItems.push(entry);
+    const el = renderNutritionEntry(entry);
+    document.getElementById('raceNutritionList').appendChild(el);
+    updateNutritionTotals();
+}
+
+// ─── Race Planner Init ───
+function initRacePlanner() {
+    // Pace planner
+    document.getElementById('calcPaceBtn')?.addEventListener('click', calcSplits);
+
+    document.getElementById('raceDistance')?.addEventListener('change', (e) => {
+        const customGroup = document.getElementById('customDistanceGroup');
+        customGroup.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    });
+
+    // Trigger on Enter in target time field
+    document.getElementById('raceTargetTime')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') calcSplits();
+    });
+
+    // Nutrition planner
+    document.getElementById('addPreRaceBtn')?.addEventListener('click', addPreRaceItem);
+    document.getElementById('addRaceNutritionBtn')?.addEventListener('click', addRaceItem);
+}

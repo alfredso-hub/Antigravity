@@ -1671,3 +1671,280 @@ select:focus {
         height: 180px;
     }
 }
+
+/* ═══════════════════════════════════════════════
+   Race Planner
+   ═══════════════════════════════════════════════ */
+
+/* ─── Pace Summary Bar ─── */
+.pace-summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--surface-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 24px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+}
+
+.pace-summary-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 90px;
+}
+
+.pace-summary-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.3px;
+}
+
+.pace-summary-label {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.pace-summary-divider {
+    width: 1px;
+    height: 40px;
+    background: var(--border);
+    flex-shrink: 0;
+    margin: 0 8px;
+}
+
+/* ─── Splits Table ─── */
+.splits-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.splits-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+}
+
+.splits-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+}
+
+.splits-table tbody tr:hover {
+    background: var(--surface-secondary);
+}
+
+.splits-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.split-pace {
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 0.95rem;
+}
+
+.split-elapsed {
+    color: var(--text-secondary);
+}
+
+.split-dist {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+}
+
+.split-partial td {
+    opacity: 0.75;
+    font-style: italic;
+}
+
+.split-partial-tag {
+    font-size: 0.65rem;
+    font-style: normal;
+    background: rgba(10,132,255,0.15);
+    color: var(--primary);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+/* ─── Nutrition Planner ─── */
+.nutrition-section-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+.nutrition-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.nutrition-entry {
+    background: var(--surface-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    transition: border-color 0.15s;
+}
+
+.nutrition-entry:hover {
+    border-color: var(--border-hover);
+}
+
+.nutrition-entry-grid {
+    display: grid;
+    grid-template-columns: 130px 1fr 90px 90px 90px 36px;
+    gap: 10px;
+    align-items: end;
+}
+
+.nutrition-timing {
+    /* slightly narrower for km/time col */
+}
+
+.nutrition-timing-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nutrition-timing-input input {
+    flex: none;
+}
+
+.nutrition-remove-col {
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: 2px;
+}
+
+.nutrition-remove-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-tertiary);
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.nutrition-remove-btn:hover {
+    background: rgba(255,69,58,0.1);
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
+/* ─── Nutrition Totals ─── */
+.nutrition-totals-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.nutrition-total-card {
+    background: var(--surface-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    text-align: center;
+}
+
+.nutrition-total-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin-bottom: 6px;
+}
+
+.nutrition-total-label {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+/* ─── Coming Soon Placeholder ─── */
+.coming-soon-placeholder {
+    text-align: center;
+    padding: 48px 20px;
+}
+
+.coming-soon-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.coming-soon-text {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+/* ─── Race Planner Responsive ─── */
+@media (max-width: 900px) {
+    .nutrition-entry-grid {
+        grid-template-columns: 110px 1fr 80px 80px 80px 36px;
+    }
+}
+
+@media (max-width: 768px) {
+    .nutrition-entry-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .nutrition-remove-col {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+
+    .nutrition-totals-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .pace-summary-bar {
+        padding: 12px 16px;
+    }
+
+    .pace-summary-value {
+        font-size: 1.1rem;
+    }
+}
