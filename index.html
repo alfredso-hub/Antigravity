@@ -392,6 +392,14 @@
                                 <option value="positive">Positive splits (+2%)</option>
                             </select>
                         </div>
+                        <div class="input-group">
+                            <label for="raceSplitInterval">Show Splits Every</label>
+                            <select id="raceSplitInterval">
+                                <option value="1">Every 1 km</option>
+                                <option value="5" selected>Every 5 km</option>
+                                <option value="10">Every 10 km</option>
+                            </select>
+                        </div>
                     </div>
 
                     <button class="btn btn-primary" id="calcPaceBtn" style="margin-bottom: 24px;">Calculate Splits</button>
@@ -404,8 +412,8 @@
                                     <tr>
                                         <th>KM</th>
                                         <th>Split Pace</th>
+                                        <th>Split Time</th>
                                         <th>Elapsed Time</th>
-                                        <th>Distance</th>
                                     </tr>
                                 </thead>
                                 <tbody id="splitsTableBody"></tbody>
@@ -440,6 +448,10 @@
                             <div class="nutrition-total-card">
                                 <div class="nutrition-total-value" id="totalCarbs">0</div>
                                 <div class="nutrition-total-label">Carbs (g)</div>
+                            </div>
+                            <div class="nutrition-total-card" id="carbsPerHourCard" style="display:none;">
+                                <div class="nutrition-total-value" id="totalCarbsPerHour">0</div>
+                                <div class="nutrition-total-label">Carbs/h</div>
                             </div>
                             <div class="nutrition-total-card">
                                 <div class="nutrition-total-value" id="totalCaffeine">0</div>
