@@ -3195,7 +3195,8 @@ const racePlanner = {
     totalRaceSecs: 0  // kept in sync with pace planner for carbs/h calc
 };
 
-// ─── Pace Planner helpers ───
+let splitsChart = null;
+
 
 function parseRaceTargetTime(str) {
     if (!str) return null;
@@ -3367,7 +3368,103 @@ function calcSplits() {
     });
 
     document.getElementById('pacePlannerResult').style.display = 'block';
+    renderSplitsChart(rows, avgPacePerKm);
     updateNutritionTotals();
+}
+
+function formatPacePlain(secsPerKm) {
+    const mins = Math.floor(secsPerKm / 60);
+    const secs = Math.floor(secsPerKm % 60);
+    return `${mins}:${String(secs).padStart(2,'0')}`;
+}
+
+function renderSplitsChart(rows, avgPacePerKm) {
+    const ctx = document.getElementById('splitsChart')?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = rows.map(r => r.km % 1 === 0 ? r.km.toFixed(0) : r.km.toFixed(2));
+    const paceData = rows.map(r => r.segPace);
+
+    // Gradient fill
+    const gradient = ctx.createLinearGradient(0, 0, 0, 220);
+    gradient.addColorStop(0, 'rgba(99,179,237,0.35)');
+    gradient.addColorStop(1, 'rgba(99,179,237,0.02)');
+
+    // Y-axis range: centre around avg pace with ±15s padding
+    const minPace = Math.min(...paceData) - 10;
+    const maxPace = Math.max(...paceData) + 10;
+
+    if (splitsChart) splitsChart.destroy();
+
+    splitsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Split Pace',
+                data: paceData,
+                borderColor: '#63B3ED',
+                backgroundColor: gradient,
+                borderWidth: 2,
+                pointRadius: rows.length <= 20 ? 4 : 2,
+                pointBackgroundColor: rows.map(r =>
+                    r.isPartial ? '#F6AD55' : '#63B3ED'
+                ),
+                pointBorderColor: 'transparent',
+                tension: 0.35,
+                fill: true
+            }, {
+                label: 'Avg Pace',
+                data: rows.map(() => avgPacePerKm),
+                borderColor: 'rgba(255,255,255,0.25)',
+                borderWidth: 1,
+                borderDash: [5, 4],
+                pointRadius: 0,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(28,28,30,0.95)',
+                    titleColor: '#F5F5F7',
+                    bodyColor: '#98989D',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 1,
+                    padding: 10,
+                    callbacks: {
+                        title: items => `KM ${items[0].label}`,
+                        label: item => item.datasetIndex === 0
+                            ? `Pace: ${formatPacePlain(item.raw)}/km`
+                            : `Avg:  ${formatPacePlain(item.raw)}/km`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#636366', font: { size: 11 } },
+                    title: { display: true, text: 'KM', color: '#636366', font: { size: 11 } }
+                },
+                y: {
+                    reverse: true,   // faster (lower sec/km) at top
+                    min: minPace,
+                    max: maxPace,
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        color: '#636366',
+                        font: { size: 11 },
+                        callback: v => formatPacePlain(v) + '/km'
+                    },
+                    title: { display: true, text: 'Pace (min/km)', color: '#636366', font: { size: 11 } }
+                }
+            }
+        }
+    });
 }
 
 // ─── Nutrition Planner ───
