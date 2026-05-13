@@ -2936,12 +2936,15 @@ function setupEventForm() {
             typeSelect.value = 'race';
             typeSelect.dispatchEvent(new Event('change'));
 
-            await loadAndRenderTimeline();
+            // Re-enable the button now — don't let the timeline refresh block it
+            setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 800);
+
+            // Refresh timeline in the background (fire-and-forget)
+            loadAndRenderTimeline().catch(err => console.error('Timeline refresh failed:', err));
         } catch (err) {
             console.error('Error saving event:', err);
-        } finally {
-            // Always re-enable the button
-            setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 1500);
+            submitBtn.textContent = 'Error!';
+            setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 2000);
         }
     });
 }
