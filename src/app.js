@@ -195,7 +195,7 @@ async function loadUserProfile() {
         updateTuningSection();
 
         if (profile.single_pb) {
-            document.getElementById('raceDistance').value = profile.single_pb.distance || '5k';
+            document.getElementById('pbRaceDistance').value = profile.single_pb.distance || '5k';
             document.getElementById('raceTime').value = profile.single_pb.time || '';
         }
         if (profile.all_pbs) {
@@ -222,7 +222,7 @@ async function handleSavePaces() {
         avatarUrl: meta.avatar_url || meta.picture || '',
         tuningMode: document.getElementById('tuningMode').value,
         singlePb: {
-            distance: document.getElementById('raceDistance').value,
+            distance: document.getElementById('pbRaceDistance').value,
             time: document.getElementById('raceTime').value
         },
         allPbs: {
@@ -300,7 +300,7 @@ function getVDOT() {
     const mode = document.getElementById('tuningMode').value;
 
     if (mode === 'single') {
-        const raceDist = document.getElementById('raceDistance').value;
+        const raceDist = document.getElementById('pbRaceDistance').value;
         const timeSec = parseTimeInput(document.getElementById('raceTime').value);
         if (!timeSec) return null;
         const distMeters = getDistanceMeters(raceDist);
@@ -3118,7 +3118,7 @@ async function init() {
         distFilter.addEventListener('change', () => renderTimelineChart());
     }
 
-    const inputs = ['raceDistance', 'raceTime', 'units', 'pb5k', 'pb10k', 'pbHalf', 'pbMarathon', 'goalTime'];
+    const inputs = ['pbRaceDistance', 'raceTime', 'units', 'pb5k', 'pb10k', 'pbHalf', 'pbMarathon', 'goalTime'];
     inputs.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
