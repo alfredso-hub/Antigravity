@@ -3268,7 +3268,7 @@ function calcSplits() {
         const sign = strategy === 'negative' ? 1 : -1; // negative → slower start
         kmPaces = kmLengths.map((_, i) => {
             const t = (i + 0.5 * kmLengths[i]) / totalKm; // normalised midpoint
-            return avgPacePerKm * (1 + sign * 0.04 * (1 - 2 * t));
+            return avgPacePerKm * (1 + sign * 0.01 * (1 - 2 * t));
         });
         // Normalise so sum exactly equals totalSecs (avoids float drift)
         const actualTotal = kmPaces.reduce((a, p, i) => a + p * kmLengths[i], 0);
