@@ -3213,7 +3213,7 @@ function formatPace(secsPerKm) {
     const secs = secsPerKm - mins * 60;
     const wholeS = Math.floor(secs);
     const hundredths = Math.round((secs - wholeS) * 100);
-    return `${mins}:${String(wholeS).padStart(2,'0')}.${String(Math.min(hundredths,99)).padStart(2,'0')}`;
+    return `${mins}:${String(wholeS).padStart(2,'0')}:${String(Math.min(hundredths,99)).padStart(2,'0')}`;
 }
 
 // Returns h:mm:ss or m:ss from total seconds
