@@ -3451,7 +3451,6 @@ function renderSplitsChart(rows, avgPacePerKm) {
                     title: { display: true, text: 'KM', color: '#636366', font: { size: 11 } }
                 },
                 y: {
-                    reverse: true,   // faster (lower sec/km) at top
                     min: minPace,
                     max: maxPace,
                     grid: { color: 'rgba(255,255,255,0.05)' },
