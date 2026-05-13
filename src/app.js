@@ -3207,115 +3207,120 @@ function parseRaceTargetTime(str) {
     return null;
 }
 
-// mm:ss.00 per km
+// Returns "m:ss.hh" pace string (mm:ss.00) from seconds/km
 function formatPace(secsPerKm) {
-    const totalSecs = Math.round(secsPerKm * 100) / 100; // avoid float noise
-    const mins = Math.floor(totalSecs / 60);
-    const secs = totalSecs - mins * 60;
+    const mins = Math.floor(secsPerKm / 60);
+    const secs = secsPerKm - mins * 60;
     const wholeS = Math.floor(secs);
     const hundredths = Math.round((secs - wholeS) * 100);
-    return `${mins}:${String(wholeS).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
+    return `${mins}:${String(wholeS).padStart(2,'0')}.${String(Math.min(hundredths,99)).padStart(2,'0')}`;
 }
 
-// h:mm:ss or m:ss
+// Returns h:mm:ss or m:ss from total seconds
 function formatElapsed(totalSeconds) {
     const s = Math.round(totalSeconds);
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
-    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-    return `${m}:${String(sec).padStart(2, '0')}`;
-}
-
-// pace (secs/km) for a given km position under a split strategy
-// Strategy ensures first-half pace * half_km + second-half pace * half_km = totalSecs
-// factor: negative=1.02 (slower start), positive=0.98 (faster start), even=1.0
-function paceAtKm(km, totalKm, avgPacePerKm, factor) {
-    if (factor === 1.0) return avgPacePerKm;
-    // Linear ramp: pace(km) = avgPace * (factor + (2 - 2*factor) * (km - 0.5) / totalKm)
-    // This integrates to exactly avgPace * totalKm over the full distance
-    const t = (km - 0.5) / totalKm; // normalised position 0..1
-    return avgPacePerKm * (factor + (2 - 2 * factor) * t);
+    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    return `${m}:${String(sec).padStart(2,'0')}`;
 }
 
 function calcSplits() {
     const distSel = document.getElementById('raceDistance');
-    const targetInput = document.getElementById('raceTargetTime');
     const strategy = document.getElementById('raceSplitStrategy').value;
-    const intervalKm = parseInt(document.getElementById('raceSplitInterval').value);
+    const intervalKm = parseFloat(document.getElementById('raceSplitInterval').value);
 
     let totalKm = distSel.value === 'custom'
         ? parseFloat(document.getElementById('customRaceDistance').value)
         : parseFloat(distSel.value);
 
     if (!totalKm || isNaN(totalKm) || totalKm <= 0) {
-        alert('Please enter a valid distance.');
-        return;
+        alert('Please enter a valid distance.'); return;
     }
-
-    const totalSecs = parseRaceTargetTime(targetInput.value);
+    const totalSecs = parseRaceTargetTime(document.getElementById('raceTargetTime').value);
     if (!totalSecs || totalSecs <= 0) {
-        alert('Please enter a valid target time (e.g. 1:45:00 or 45:00).');
-        return;
+        alert('Please enter a valid target time (e.g. 1:45:00 or 45:00).'); return;
     }
 
     racePlanner.totalRaceSecs = totalSecs;
 
+    // ── avgPace: the one true pace ──
+    // pace (sec/km) = totalSecs / totalKm — this is what always shows in the summary bar
     const avgPacePerKm = totalSecs / totalKm;
-    const factor = strategy === 'negative' ? 1.02 : strategy === 'positive' ? 0.98 : 1.0;
 
-    // Build checkpoint list: multiples of intervalKm, always include the finish
+    // ── Per-km pace array (for negative/positive strategy) ──
+    // Build one entry per 1-km strip; last entry covers the partial km if any.
+    const fullKms = Math.floor(totalKm);
+    const remainder = +(totalKm - fullKms).toFixed(6);
+    const kmCount = fullKms + (remainder > 0.001 ? 1 : 0);
+    const kmLengths = Array.from({length: kmCount}, (_, i) =>
+        i < fullKms ? 1 : remainder
+    );
+
+    let kmPaces;
+    if (strategy === 'even') {
+        kmPaces = kmLengths.map(() => avgPacePerKm);
+    } else {
+        // Symmetric linear ramp: 4% deviation at start/end, crosses avg at midpoint.
+        // pace_i = avgPace * (1 + sign * 0.04 * (1 - 2 * t_i))  where t_i ∈ [0,1]
+        const sign = strategy === 'negative' ? 1 : -1; // negative → slower start
+        kmPaces = kmLengths.map((_, i) => {
+            const t = (i + 0.5 * kmLengths[i]) / totalKm; // normalised midpoint
+            return avgPacePerKm * (1 + sign * 0.04 * (1 - 2 * t));
+        });
+        // Normalise so sum exactly equals totalSecs (avoids float drift)
+        const actualTotal = kmPaces.reduce((a, p, i) => a + p * kmLengths[i], 0);
+        const norm = totalSecs / actualTotal;
+        kmPaces = kmPaces.map(p => p * norm);
+    }
+
+    // ── Build checkpoint rows ──
+    // checkpoints = multiples of intervalKm up to (but not including) totalKm, plus totalKm
     const checkpoints = [];
     let cp = intervalKm;
-    while (cp < totalKm) {
-        checkpoints.push(cp);
+    while (cp < totalKm - 0.001) {
+        checkpoints.push(parseFloat(cp.toFixed(6)));
         cp += intervalKm;
     }
-    checkpoints.push(totalKm); // always include finish
+    checkpoints.push(totalKm);
 
-    // For each checkpoint, calculate:
-    //  - split pace = avg pace over the segment (from prev checkpoint to this one)
-    //  - split time = time for this segment
-    //  - elapsed = cumulative time
-    // Use the paceAtKm function — integrate over each 1km strip within the segment
     const rows = [];
     let prevKm = 0;
-    let prevElapsed = 0;
+    let elapsed = 0;
 
-    checkpoints.forEach(cpKm => {
-        // Integrate per-km paces over the segment from prevKm to cpKm
-        // Split into 0.001km sub-steps for accuracy, or just sum whole-km strips
-        const segLen = cpKm - prevKm;
+    for (const cpKm of checkpoints) {
+        const segLen = +(cpKm - prevKm).toFixed(6);
         let segTime = 0;
-        // Sum 1km strips within segment; partial for last piece
-        const segStart = prevKm;
-        let pos = segStart;
-        while (pos < cpKm) {
-            const step = Math.min(1, cpKm - pos);
-            const midKm = pos + step / 2; // midpoint of this strip
-            const stripPace = paceAtKm(midKm, totalKm, avgPacePerKm, factor);
-            segTime += stripPace * step;
-            pos += step;
+
+        // Walk through each 1-km strip that overlaps [prevKm, cpKm)
+        let pos = prevKm;
+        while (pos < cpKm - 0.0001) {
+            const stripIdx = Math.min(Math.floor(pos + 0.0001), kmCount - 1);
+            const stripEnd = Math.min(stripIdx + 1, totalKm);
+            const stepEnd  = Math.min(stripEnd, cpKm);
+            const step = stepEnd - pos;
+            segTime += kmPaces[stripIdx] * step;
+            pos = stepEnd;
         }
 
-        const elapsed = prevElapsed + segTime;
-        const segPace = segTime / segLen; // pace per km for this segment
+        elapsed += segTime;
+        const segPace = segTime / segLen; // pace per km over this segment
+
         const isFinish = Math.abs(cpKm - totalKm) < 0.001;
-        const distLabel = isFinish && (totalKm % intervalKm !== 0)
-            ? `${segLen.toFixed(3)} km`
-            : `${segLen % 1 === 0 ? segLen.toFixed(0) : segLen.toFixed(3)} km`;
+        const isPartial = isFinish && remainder > 0.001 &&
+            (intervalKm === 1 ? true : Math.abs(segLen - intervalKm) > 0.001);
 
-        rows.push({ km: cpKm, segLen, segTime, segPace, elapsed, isFinish, distLabel });
+        rows.push({ km: cpKm, segLen, segTime, segPace, elapsed, isFinish, isPartial });
         prevKm = cpKm;
-        prevElapsed = elapsed;
-    });
+    }
 
-    // ─── Render summary bar ───
+    // ── Summary bar ──
     const distLabel = distSel.value === 'custom'
         ? `${totalKm} km`
-        : distSel.options[distSel.selectedIndex]?.text.replace(/\(.*\)/, '').trim();
-    const summaryBar = document.getElementById('paceSummaryBar');
-    summaryBar.innerHTML = `
+        : distSel.options[distSel.selectedIndex]?.text.replace(/\(.*\)/,'').trim();
+
+    document.getElementById('paceSummaryBar').innerHTML = `
         <div class="pace-summary-item">
             <span class="pace-summary-value">${formatElapsed(totalSecs)}</span>
             <span class="pace-summary-label">Target Time</span>
@@ -3332,21 +3337,24 @@ function calcSplits() {
         </div>
         <div class="pace-summary-divider"></div>
         <div class="pace-summary-item">
-            <span class="pace-summary-value">${strategy === 'even' ? '〰' : strategy === 'negative' ? '📉→📈' : '📈→📉'}</span>
-            <span class="pace-summary-label">${strategy === 'even' ? 'Even' : strategy === 'negative' ? 'Negative' : 'Positive'} splits</span>
-        </div>
-    `;
+            <span class="pace-summary-value">${strategy==='even'?'〰':strategy==='negative'?'📉→📈':'📈→📉'}</span>
+            <span class="pace-summary-label">${strategy==='even'?'Even':strategy==='negative'?'Negative':'Positive'} splits</span>
+        </div>`;
 
-    // ─── Render table ───
+    // ── Table ──
     const tbody = document.getElementById('splitsTableBody');
     tbody.innerHTML = '';
     rows.forEach(row => {
         const tr = document.createElement('tr');
-        if (row.isFinish && row.segLen < intervalKm - 0.001) tr.className = 'split-partial';
+        if (row.isPartial) tr.className = 'split-partial';
 
-        const kmLabel = row.isFinish && totalKm % 1 !== 0
-            ? `${totalKm.toFixed(3)} <span class="split-partial-tag">finish</span>`
-            : row.km.toFixed(0);
+        // KM label
+        let kmLabel;
+        if (row.isFinish && totalKm % 1 !== 0) {
+            kmLabel = `${totalKm.toFixed(3)} <span class="split-partial-tag">finish</span>`;
+        } else {
+            kmLabel = row.km.toFixed(0);
+        }
 
         tr.innerHTML = `
             <td>${kmLabel}</td>
@@ -3358,7 +3366,7 @@ function calcSplits() {
     });
 
     document.getElementById('pacePlannerResult').style.display = 'block';
-    updateNutritionTotals(); // recalc carbs/h with updated race time
+    updateNutritionTotals();
 }
 
 // ─── Nutrition Planner ───
