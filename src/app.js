@@ -354,8 +354,8 @@ function renderChart(weeks, unit) {
 
     if (myChart) myChart.destroy();
 
-    Chart.defaults.color = '#98989D';
-    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
+    Chart.defaults.color = '#6B6B6B';
+    Chart.defaults.font.family = "'Barlow', system-ui, sans-serif";
 
     // Get health overlays (only when committed and we have a race date)
     let healthAnnotations = {};
@@ -372,26 +372,26 @@ function renderChart(weeks, unit) {
                 {
                     label: 'Total Distance',
                     data: stats.map(s => (s.total * factor).toFixed(1)),
-                    borderColor: '#F5F5F7', backgroundColor: '#F5F5F7',
-                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
+                    borderColor: '#EFEFEF', backgroundColor: '#EFEFEF',
+                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#141414'
                 },
                 {
                     label: 'LT (M pace)',
                     data: stats.map(s => (s.lt * factor).toFixed(1)),
-                    borderColor: '#FF9F0A', backgroundColor: '#FF9F0A',
-                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
+                    borderColor: '#C07840', backgroundColor: '#C07840',
+                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#141414'
                 },
                 {
                     label: 'AT (M→T)',
                     data: stats.map(s => (s.at * factor).toFixed(1)),
-                    borderColor: '#0A84FF', backgroundColor: '#0A84FF',
-                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
+                    borderColor: '#3B6B8A', backgroundColor: '#3B6B8A',
+                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#141414'
                 },
                 {
                     label: 'VO2 (I & R)',
                     data: stats.map(s => (s.aboveAt * factor).toFixed(1)),
-                    borderColor: '#FF453A', backgroundColor: '#FF453A',
-                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#1C1C1E'
+                    borderColor: '#C0504A', backgroundColor: '#C0504A',
+                    borderWidth: 2, tension: 0.3, pointBackgroundColor: '#141414'
                 }
             ]
         },
@@ -400,23 +400,23 @@ function renderChart(weeks, unit) {
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { position: 'top', labels: { color: '#98989D' } },
+                legend: { position: 'top', labels: { color: '#6B6B6B' } },
                 tooltip: {
-                    padding: 10, backgroundColor: 'rgba(44,44,46,0.95)',
-                    titleColor: '#F5F5F7', bodyColor: '#F5F5F7',
-                    titleFont: { size: 13 }, bodyFont: { size: 12 },
-                    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
+                    padding: 10, backgroundColor: '#242424',
+                    titleColor: '#EFEFEF', bodyColor: '#EFEFEF',
+                    titleFont: { size: 13, family: "'Barlow', sans-serif", weight: '600' }, bodyFont: { size: 12, family: "'Barlow', sans-serif" },
+                    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)'
                 },
                 annotation: {
                     annotations: healthAnnotations
                 }
             },
             scales: {
-                x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#636366' } },
+                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#6B6B6B' } },
                 y: {
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    title: { display: true, text: `Distance (${unit})`, color: '#636366' },
-                    ticks: { color: '#636366' }
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    title: { display: true, text: `Distance (${unit})`, color: '#6B6B6B' },
+                    ticks: { color: '#6B6B6B' }
                 }
             }
         }
@@ -2453,8 +2453,8 @@ async function renderProgressAnalytics(commitId) {
     });
 
     // Chart defaults
-    Chart.defaults.color = '#98989D';
-    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
+    Chart.defaults.color = '#6B6B6B';
+    Chart.defaults.font.family = "'Barlow', system-ui, sans-serif";
 
     // --- Chart 1: Planned vs Actual Volume ---
     if (volumeCompChart) volumeCompChart.destroy();
@@ -2468,16 +2468,16 @@ async function renderProgressAnalytics(commitId) {
                     {
                         label: `Planned (${unit})`,
                         data: plannedVolumes,
-                        backgroundColor: 'rgba(10, 132, 255, 0.35)',
-                        borderColor: '#0A84FF',
+                        backgroundColor: 'rgba(59, 107, 138, 0.35)',
+                        borderColor: '#3B6B8A',
                         borderWidth: 1,
                         borderRadius: 4
                     },
                     {
                         label: `Actual (${unit})`,
                         data: actualVolumes,
-                        backgroundColor: 'rgba(48, 209, 88, 0.35)',
-                        borderColor: '#30D158',
+                        backgroundColor: 'rgba(107, 153, 114, 0.35)',
+                        borderColor: '#6B9972',
                         borderWidth: 1,
                         borderRadius: 4
                     }
@@ -2486,12 +2486,12 @@ async function renderProgressAnalytics(commitId) {
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'top', labels: { color: '#98989D', boxWidth: 12 } },
-                    tooltip: { padding: 10, backgroundColor: 'rgba(44,44,46,0.95)', titleColor: '#F5F5F7', bodyColor: '#F5F5F7' }
+                    legend: { position: 'top', labels: { color: '#6B6B6B', boxWidth: 12 } },
+                    tooltip: { padding: 10, backgroundColor: '#242424', titleColor: '#EFEFEF', bodyColor: '#EFEFEF', titleFont: { size: 13, family: "'Barlow', sans-serif", weight: '600' }, bodyFont: { size: 12, family: "'Barlow', sans-serif" }, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' }
                 },
                 scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#636366' } },
-                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: `Distance (${unit})`, color: '#636366' }, ticks: { color: '#636366' } }
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#6B6B6B' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, title: { display: true, text: `Distance (${unit})`, color: '#6B6B6B' }, ticks: { color: '#6B6B6B' } }
                 }
             }
         });
@@ -2509,30 +2509,30 @@ async function renderProgressAnalytics(commitId) {
                     {
                         label: 'Planned Cumulative',
                         data: cumulativePlannedArr,
-                        borderColor: '#0A84FF',
-                        backgroundColor: 'rgba(10, 132, 255, 0.1)',
+                        borderColor: '#3B6B8A',
+                        backgroundColor: 'rgba(59, 107, 138, 0.1)',
                         fill: true, borderWidth: 2, tension: 0.3,
-                        pointBackgroundColor: '#1C1C1E', pointBorderColor: '#0A84FF'
+                        pointBackgroundColor: '#141414', pointBorderColor: '#3B6B8A'
                     },
                     {
                         label: 'Actual Cumulative',
                         data: cumulativeActualArr,
-                        borderColor: '#30D158',
-                        backgroundColor: 'rgba(48, 209, 88, 0.1)',
+                        borderColor: '#6B9972',
+                        backgroundColor: 'rgba(107, 153, 114, 0.1)',
                         fill: true, borderWidth: 2, tension: 0.3,
-                        pointBackgroundColor: '#1C1C1E', pointBorderColor: '#30D158'
+                        pointBackgroundColor: '#141414', pointBorderColor: '#6B9972'
                     }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'top', labels: { color: '#98989D', boxWidth: 12 } },
-                    tooltip: { padding: 10, backgroundColor: 'rgba(44,44,46,0.95)', titleColor: '#F5F5F7', bodyColor: '#F5F5F7' }
+                    legend: { position: 'top', labels: { color: '#6B6B6B', boxWidth: 12 } },
+                    tooltip: { padding: 10, backgroundColor: '#242424', titleColor: '#EFEFEF', bodyColor: '#EFEFEF', titleFont: { size: 13, family: "'Barlow', sans-serif", weight: '600' }, bodyFont: { size: 12, family: "'Barlow', sans-serif" }, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' }
                 },
                 scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#636366' } },
-                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: `Cumulative (${unit})`, color: '#636366' }, ticks: { color: '#636366' } }
+                    x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#6B6B6B' } },
+                    y: { grid: { color: 'rgba(255,255,255,0.03)' }, title: { display: true, text: `Cumulative (${unit})`, color: '#6B6B6B' }, ticks: { color: '#6B6B6B' } }
                 }
             }
         });
@@ -2550,19 +2550,19 @@ async function renderProgressAnalytics(commitId) {
                     {
                         label: 'Completed',
                         data: completedCounts,
-                        backgroundColor: 'rgba(48, 209, 88, 0.6)',
+                        backgroundColor: 'rgba(107, 153, 114, 0.6)',
                         borderRadius: 3
                     },
                     {
                         label: 'Skipped',
                         data: skippedCounts,
-                        backgroundColor: 'rgba(255, 69, 58, 0.5)',
+                        backgroundColor: 'rgba(192, 80, 74, 0.5)',
                         borderRadius: 3
                     },
                     {
                         label: 'Remaining',
                         data: remainingCounts,
-                        backgroundColor: 'rgba(152, 152, 157, 0.25)',
+                        backgroundColor: 'rgba(107, 107, 107, 0.25)',
                         borderRadius: 3
                     }
                 ]
@@ -2571,12 +2571,12 @@ async function renderProgressAnalytics(commitId) {
                 responsive: true, maintainAspectRatio: false,
                 indexAxis: 'y',
                 plugins: {
-                    legend: { position: 'top', labels: { color: '#98989D', boxWidth: 12 } },
-                    tooltip: { padding: 10, backgroundColor: 'rgba(44,44,46,0.95)', titleColor: '#F5F5F7', bodyColor: '#F5F5F7' }
+                    legend: { position: 'top', labels: { color: '#6B6B6B', boxWidth: 12 } },
+                    tooltip: { padding: 10, backgroundColor: '#242424', titleColor: '#EFEFEF', bodyColor: '#EFEFEF', titleFont: { size: 13, family: "'Barlow', sans-serif", weight: '600' }, bodyFont: { size: 12, family: "'Barlow', sans-serif" }, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' }
                 },
                 scales: {
-                    x: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#636366', stepSize: 1 }, title: { display: true, text: 'Sessions', color: '#636366' } },
-                    y: { stacked: true, grid: { display: false }, ticks: { color: '#636366' } }
+                    x: { stacked: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#6B6B6B', stepSize: 1 }, title: { display: true, text: 'Sessions', color: '#6B6B6B' } },
+                    y: { stacked: true, grid: { display: false }, ticks: { color: '#6B6B6B' } }
                 }
             }
         });
@@ -2756,8 +2756,8 @@ function renderTimelineChart() {
     // Don't render chart if there's no data at all
     if (raceData.length === 0 && healthEvents.length === 0) return;
 
-    Chart.defaults.color = '#98989D';
-    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif';
+    Chart.defaults.color = '#6B6B6B';
+    Chart.defaults.font.family = "'Barlow', system-ui, sans-serif";
 
     try {
         timelineChart = new Chart(ctx, {
@@ -2771,15 +2771,17 @@ function renderTimelineChart() {
                 legend: {
                     display: datasets.length > 1,
                     position: 'top',
-                    labels: { color: '#98989D' }
+                    labels: { color: '#6B6B6B' }
                 },
                 tooltip: {
                     padding: 10,
-                    backgroundColor: 'rgba(44,44,46,0.95)',
-                    titleColor: '#F5F5F7',
-                    bodyColor: '#F5F5F7',
+                    backgroundColor: '#242424',
+                    titleColor: '#EFEFEF',
+                    bodyColor: '#EFEFEF',
                     borderWidth: 1,
-                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderColor: 'rgba(255,255,255,0.07)',
+                    titleFont: { size: 13, family: "'Barlow', sans-serif", weight: '600' },
+                    bodyFont: { size: 12, family: "'Barlow', sans-serif" },
                     callbacks: {
                         title: (items) => {
                             if (!items.length) return '';
@@ -2807,19 +2809,19 @@ function renderTimelineChart() {
                         unit: 'month',
                         displayFormats: { month: 'MMM yyyy', day: 'dd MMM' }
                     },
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    ticks: { color: '#636366' },
-                    title: { display: true, text: 'Date', color: '#636366' }
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#6B6B6B' },
+                    title: { display: true, text: 'Date', color: '#6B6B6B' }
                 },
                 y: {
-                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    grid: { color: 'rgba(255,255,255,0.03)' },
                     title: {
                         display: true,
                         text: 'Race Time',
-                        color: '#636366'
+                        color: '#6B6B6B'
                     },
                     ticks: {
-                        color: '#636366',
+                        color: '#6B6B6B',
                         callback: function(value) {
                             return formatRaceTimeDisplay(value, singleDistance || '5k');
                         }
@@ -3399,8 +3401,8 @@ function renderSplitsChart(rows, avgPacePerKm) {
 
     // Gradient fill
     const gradient = ctx.createLinearGradient(0, 0, 0, 220);
-    gradient.addColorStop(0, 'rgba(99,179,237,0.35)');
-    gradient.addColorStop(1, 'rgba(99,179,237,0.02)');
+    gradient.addColorStop(0, 'rgba(107, 153, 114, 0.35)');
+    gradient.addColorStop(1, 'rgba(107, 153, 114, 0.02)');
 
     // Y-axis range: centre around avg pace with ±15s padding
     const minPace = Math.min(...paceData) - 10;
@@ -3415,12 +3417,12 @@ function renderSplitsChart(rows, avgPacePerKm) {
             datasets: [{
                 label: 'Split Pace',
                 data: paceData,
-                borderColor: '#63B3ED',
+                borderColor: '#6B9972',
                 backgroundColor: gradient,
                 borderWidth: 2,
                 pointRadius: rows.length <= 20 ? 4 : 2,
                 pointBackgroundColor: rows.map(r =>
-                    r.isPartial ? '#F6AD55' : '#63B3ED'
+                    r.isPartial ? '#C07840' : '#6B9972'
                 ),
                 pointBorderColor: 'transparent',
                 tension: 0.35,
@@ -3428,7 +3430,7 @@ function renderSplitsChart(rows, avgPacePerKm) {
             }, {
                 label: 'Avg Pace',
                 data: rows.map(() => avgPacePerKm),
-                borderColor: 'rgba(255,255,255,0.25)',
+                borderColor: 'rgba(255,255,255,0.15)',
                 borderWidth: 1,
                 borderDash: [5, 4],
                 pointRadius: 0,
@@ -3442,12 +3444,14 @@ function renderSplitsChart(rows, avgPacePerKm) {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: 'rgba(28,28,30,0.95)',
-                    titleColor: '#F5F5F7',
-                    bodyColor: '#98989D',
-                    borderColor: 'rgba(255,255,255,0.1)',
+                    backgroundColor: '#242424',
+                    titleColor: '#EFEFEF',
+                    bodyColor: '#EFEFEF',
+                    borderColor: 'rgba(255,255,255,0.07)',
                     borderWidth: 1,
                     padding: 10,
+                    titleFont: { size: 13, family: "'Barlow', sans-serif", weight: '600' },
+                    bodyFont: { size: 12, family: "'Barlow', sans-serif" },
                     callbacks: {
                         title: items => `KM ${items[0].label}`,
                         label: item => item.datasetIndex === 0
@@ -3458,20 +3462,20 @@ function renderSplitsChart(rows, avgPacePerKm) {
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    ticks: { color: '#636366', font: { size: 11 } },
-                    title: { display: true, text: 'KM', color: '#636366', font: { size: 11 } }
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#6B6B6B', font: { size: 11, family: "'Barlow', sans-serif" } },
+                    title: { display: true, text: 'KM', color: '#6B6B6B', font: { size: 11, family: "'Barlow', sans-serif" } }
                 },
                 y: {
                     min: minPace,
                     max: maxPace,
-                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    grid: { color: 'rgba(255,255,255,0.03)' },
                     ticks: {
-                        color: '#636366',
-                        font: { size: 11 },
+                        color: '#6B6B6B',
+                        font: { size: 11, family: "'Barlow', sans-serif" },
                         callback: v => formatPacePlain(v) + '/km'
                     },
-                    title: { display: true, text: 'Pace (min/km)', color: '#636366', font: { size: 11 } }
+                    title: { display: true, text: 'Pace (min/km)', color: '#6B6B6B', font: { size: 11, family: "'Barlow', sans-serif" } }
                 }
             }
         }
