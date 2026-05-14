@@ -172,16 +172,14 @@ export async function loadUserEvents(userId) {
 }
 
 export async function createUserEvent(eventData) {
-    const { data, error } = await supabase
+    const { error } = await supabase
         .from('user_events')
-        .insert(eventData)
-        .select()
-        .single();
+        .insert(eventData);
 
     if (error) {
         console.error('Error creating event:', error);
     }
-    return { data, error };
+    return { data: null, error };
 }
 
 export async function updateUserEvent(eventId, eventData) {
