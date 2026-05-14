@@ -113,7 +113,7 @@ function updateAdminUI() {
         if (adminModeEnabled) {
             adminActions.style.display = 'flex';
             adminActions.innerHTML = `
-                <button class="btn btn-sm btn-danger" id="adminDeletePlanBtn" title="Delete this plan">🗑️</button>
+                <button class="btn btn-sm btn-danger" id="adminDeletePlanBtn" title="Delete this plan">Delete</button>
             `;
             document.getElementById('adminDeletePlanBtn').addEventListener('click', handleDeletePlan);
         } else {
@@ -598,12 +598,12 @@ async function renderPlan() {
         const healthMode = committedPlanData.commit_metadata?.health_mode;
         if (healthMode) {
             const since = new Date(healthMode.since).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
-            const emoji = healthMode.mode === 'sick' ? '🤒' : '🩹';
+            const emoji = healthMode.mode === 'sick' ? 'Status:' : 'Status:';
             const label = healthMode.mode === 'sick' ? 'sick' : 'injured';
-            const color = healthMode.mode === 'sick' ? 'var(--accent-orange)' : 'var(--accent-red)';
+            const color = healthMode.mode === 'sick' ? 'var(--orange)' : 'var(--red)';
             const bannerHtml = `
-                <div class="health-mode-banner" style="border-color: ${color};">
-                    <span>${emoji}</span>
+                <div class="health-mode-banner" style="border-left-color: ${color};">
+                    <span style="font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: ${color};">${emoji}</span>
                     <div>
                         <strong>You've been ${label} since ${since}.</strong>
                         <span style="color: var(--text-secondary);">Click any day to mark your last ${label} day.</span>
@@ -1835,7 +1835,7 @@ function openCommitModal() {
                     <p style="color:var(--text-secondary); margin-bottom: 20px;">Set your schedule and training profile to generate a personalized plan.</p>
 
                     <div class="commit-modal-section">
-                        <h4 class="commit-section-title">📅 Schedule</h4>
+                        <h4 class="commit-section-title">Schedule</h4>
                         <div class="commit-fields-grid">
                             <div class="input-group">
                                 <label for="commitDateType">Date Type</label>
@@ -1852,7 +1852,7 @@ function openCommitModal() {
                     </div>
 
                     <div class="commit-modal-section">
-                        <h4 class="commit-section-title">🏃 Training Profile</h4>
+                        <h4 class="commit-section-title">Training Profile</h4>
                         <div class="commit-fields-grid">
                             <div class="input-group">
                                 <label for="commitWeeklyVolume">Current Weekly Volume (km)</label>
@@ -1884,7 +1884,7 @@ function openCommitModal() {
                     </div>
 
                     <div class="commit-modal-section">
-                        <h4 class="commit-section-title">🎯 Goals</h4>
+                        <h4 class="commit-section-title">Goals</h4>
                         <div class="commit-fields-grid">
                             <div class="input-group">
                                 <label for="commitTargetTime">Target Race Time (optional)</label>
@@ -2038,7 +2038,7 @@ function openWorkoutLogModal(workout, dayData) {
                     </div>
 
                     <div class="commit-modal-section">
-                        <h4 class="commit-section-title">📋 Result</h4>
+                        <h4 class="commit-section-title">Result</h4>
                         <div class="commit-fields-grid">
                             <div class="input-group">
                                 <label for="wlStatus">Status</label>
@@ -2059,7 +2059,7 @@ function openWorkoutLogModal(workout, dayData) {
 
                     <div id="wlCompletedFields">
                         <div class="commit-modal-section">
-                            <h4 class="commit-section-title">📊 Actual Data</h4>
+                            <h4 class="commit-section-title">Actual Data</h4>
                             <div class="commit-fields-grid">
                                 <div class="input-group">
                                     <label for="wlDistance">Distance (${unit})</label>
@@ -3056,7 +3056,7 @@ function getHealthOverlaysForPlanChart(weeks, raceDate) {
             borderWidth: 1,
             label: {
                 display: true,
-                content: `${event.event_type === 'sickness' ? '🤒' : '🩹'} ${event.notes || event.event_type}`,
+                content: `${event.event_type === 'sickness' ? 'Sick:' : 'Injured:'} ${event.notes || event.event_type}`,
                 position: 'start',
                 font: { size: 9 },
                 color: event.event_type === 'sickness' ? '#FF9F0A' : '#FF453A'
@@ -3351,8 +3351,8 @@ function calcSplits() {
         </div>
         <div class="pace-summary-divider"></div>
         <div class="pace-summary-item">
-            <span class="pace-summary-value">${strategy==='even'?'〰':strategy==='negative'?'📉→📈':'📈→📉'}</span>
-            <span class="pace-summary-label">${strategy==='even'?'Even':strategy==='negative'?'Negative':'Positive'} splits</span>
+            <span class="pace-summary-value">${strategy==='even'?'Even':strategy==='negative'?'Negative':'Positive'}</span>
+            <span class="pace-summary-label">Strategy</span>
         </div>`;
 
     // ── Table ──
