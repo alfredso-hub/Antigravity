@@ -2648,8 +2648,12 @@ function formatRaceTimeDisplay(seconds, distance) {
 async function loadAndRenderTimeline() {
     if (!currentUser) return;
     allUserEvents = await loadUserEvents(currentUser.id);
-    renderTimelineChart();
-    renderEventsList();
+    // Defer synchronous Chart.js work to a macrotask so any pending
+    // Supabase promise callbacks (e.g. a concurrent INSERT) can resolve first.
+    setTimeout(() => {
+        try { renderTimelineChart(); } catch(e) { console.error('Timeline chart error:', e); }
+        try { renderEventsList(); }   catch(e) { console.error('Events list error:', e); }
+    }, 0);
 }
 
 function renderTimelineChart() {
@@ -2881,8 +2885,13 @@ function setupEventForm() {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Saving...';
 
+        // Hard escape-hatch: always re-enable after 10 s regardless of what happens
+        const resetBtn = () => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; };
+        const safetyTimer = setTimeout(resetBtn, 10000);
+
         try {
             const { data: createdEvent, error } = await createUserEvent(eventData);
+            clearTimeout(safetyTimer);
             if (error) {
                 submitBtn.textContent = 'Error!';
                 setTimeout(() => { submitBtn.textContent = 'Add Event'; submitBtn.disabled = false; }, 2000);
