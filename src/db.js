@@ -274,9 +274,9 @@ export async function getCommittedPlan(userId) {
         .from('user_plan_commits')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();  // Returns null (not 406) when user has no committed plan
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
         console.error('Error loading committed plan:', error);
     }
     return data;
