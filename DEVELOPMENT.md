@@ -149,6 +149,22 @@ Run these SQL files in the Supabase SQL Editor **in order**:
 
 ---
 
+## Design System & UI/UX (Sober Fitness Aesthetic)
+
+The app uses a dark, "sober fitness" aesthetic. Avoid generic bright colors and emojis.
+- **Typography:** `Barlow` (body) and `Barlow Condensed` (headings/nav).
+- **Palette:** 
+  - Base Background: `#0C0C0C`
+  - Surfaces: `#141414` (Surface 1), `#1C1C1C` (Surface 2), `#242424` (Surface 3)
+  - Accent: Sage Green `#6B9972` (text: `#8BBF93`, dim: `rgba(107, 153, 114, 0.12)`)
+  - Semantic: Orange `#C07840`, Red `#C0504A`, Slate Blue `#3B6B8A`, Yellow `#B89A40`.
+- **Borders & Radii:** Sharp `4px`/`8px` radii (`var(--radius-sm)`, `var(--radius-md)`), hairline borders (`1px solid var(--border)`).
+- **Icons:** Inline Lucide SVGs with `currentColor` and `stroke-width: 2`. No emojis allowed in the UI.
+- **Charts:** All Chart.js instances must use the Sober palette variables (e.g., Sage Green/Slate Blue lines, `#242424` tooltips).
+- **Navigation:** Desktop sidebar (`220px`), collapses to `80px` on tablets, and becomes a mobile bottom-tab bar on screens `< 600px`.
+
+---
+
 ## Important Gotchas
 
 ### Supabase `.single()` vs `.maybeSingle()`
