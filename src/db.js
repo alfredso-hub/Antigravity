@@ -388,3 +388,97 @@ export async function wipeSandboxData(sandboxUserId) {
     await supabase.from('user_plan_customizations').delete().eq('user_id', sandboxUserId);
 }
 
+// ─── Session Categories ───
+export async function loadSessionCategories() {
+    const { data, error } = await supabase
+        .from('session_categories')
+        .select('*')
+        .order('sort_order', { ascending: true });
+    if (error) console.error('Error loading session categories:', error);
+    return data || [];
+}
+
+export async function createSessionCategory(categoryData) {
+    const { error } = await supabase
+        .from('session_categories')
+        .insert({
+            name: categoryData.name,
+            color: categoryData.color || '#6B9972',
+            sort_order: categoryData.sortOrder || 0
+        });
+    if (error) console.error('Error creating session category:', error);
+    return { error };
+}
+
+export async function updateSessionCategory(id, categoryData) {
+    const { error } = await supabase
+        .from('session_categories')
+        .update({
+            name: categoryData.name,
+            color: categoryData.color,
+            sort_order: categoryData.sortOrder
+        })
+        .eq('id', id);
+    if (error) console.error('Error updating session category:', error);
+    return { error };
+}
+
+export async function deleteSessionCategory(id) {
+    const { error } = await supabase
+        .from('session_categories')
+        .delete()
+        .eq('id', id);
+    if (error) console.error('Error deleting session category:', error);
+    return { error };
+}
+
+// ─── Saved Sessions ───
+export async function loadSavedSessions() {
+    const { data, error } = await supabase
+        .from('saved_sessions')
+        .select('*, session_categories(name, color), profiles(display_name)')
+        .order('created_at', { ascending: false });
+    if (error) console.error('Error loading saved sessions:', error);
+    return data || [];
+}
+
+export async function createSavedSession(userId, sessionData) {
+    const { error } = await supabase
+        .from('saved_sessions')
+        .insert({
+            created_by: userId,
+            name: sessionData.name,
+            category_id: sessionData.categoryId || null,
+            notes: sessionData.notes || null,
+            workout_type: sessionData.workoutType || 'session',
+            workout_data: sessionData.workoutData,
+            auto_desc: sessionData.autoDesc || null
+        });
+    if (error) console.error('Error creating saved session:', error);
+    return { error };
+}
+
+export async function updateSavedSession(id, sessionData) {
+    const { error } = await supabase
+        .from('saved_sessions')
+        .update({
+            name: sessionData.name,
+            category_id: sessionData.categoryId || null,
+            notes: sessionData.notes || null,
+            workout_type: sessionData.workoutType,
+            workout_data: sessionData.workoutData,
+            auto_desc: sessionData.autoDesc || null
+        })
+        .eq('id', id);
+    if (error) console.error('Error updating saved session:', error);
+    return { error };
+}
+
+export async function deleteSavedSession(id) {
+    const { error } = await supabase
+        .from('saved_sessions')
+        .delete()
+        .eq('id', id);
+    if (error) console.error('Error deleting saved session:', error);
+    return { error };
+}

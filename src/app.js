@@ -9,7 +9,9 @@ import {
     loadAdminStatus, loadUserEvents, createUserEvent, updateUserEvent,
     deleteUserEvent, commitToPlan, uncommitFromPlan, getCommittedPlan,
     loadUserWorkouts, updateUserWorkout, createPlanAdjustment, wipeSandboxData,
-    deletePlan, updatePlanWeek, updateCommitHealthMode
+    deletePlan, updatePlanWeek, updateCommitHealthMode,
+    loadSessionCategories, createSessionCategory, updateSessionCategory, deleteSessionCategory,
+    loadSavedSessions, createSavedSession, updateSavedSession, deleteSavedSession
 } from './db.js';
 import { runAdjustmentEngine } from './engine/adjustment.js';
 
@@ -34,6 +36,10 @@ let completionChart = null;
 let isSandboxMode = false;
 let realCurrentUser = null;
 const SANDBOX_USER_ID = '99999999-9999-9999-9999-999999999999';
+
+// Session Library State
+let savedSessions = [];
+let sessionCategories = [];
 
 // ─── Auth UI ───
 function renderAuthUI(user) {
@@ -68,6 +74,11 @@ function renderAuthUI(user) {
 function renderAdminToggle() {
     const area = document.getElementById('adminToggleArea');
     if (!area) return;
+
+    // Show/hide the Settings tab in the sidebar
+    const settingsBtn = document.getElementById('settingsTabBtn');
+    if (settingsBtn) settingsBtn.style.display = isAdmin ? 'flex' : 'none';
+
     if (!isAdmin) {
         area.innerHTML = '';
         return;
@@ -90,10 +101,8 @@ function renderAdminToggle() {
     `;
     document.getElementById('adminModeCheckbox').addEventListener('change', (e) => {
         adminModeEnabled = e.target.checked;
-        // Show/hide sandbox toggle in header
         const sandboxContainer = document.getElementById('sandboxToggleContainer');
         if (sandboxContainer) sandboxContainer.style.display = adminModeEnabled ? 'flex' : 'none';
-        // If admin turned off while sandbox is on, turn sandbox off
         if (!adminModeEnabled && isSandboxMode) {
             isSandboxMode = false;
             document.getElementById('sandboxModeCheckbox').checked = false;
@@ -739,6 +748,24 @@ function setupCreatePlan() {
     const createPlanForm = document.getElementById('createPlanForm');
     const basePlanSelect = document.getElementById('basePlanSelect');
 
+    // ── Sub-tab wiring ──
+    let sessionLibraryLoaded = false;
+    document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const targetId = btn.dataset.subtab;
+            document.querySelectorAll('.sub-tab-content').forEach(p => p.classList.remove('active'));
+            const panel = document.getElementById(targetId);
+            if (panel) panel.classList.add('active');
+            // Lazy-load session library on first visit
+            if (targetId === 'sessionLibrarySubTab' && !sessionLibraryLoaded) {
+                sessionLibraryLoaded = true;
+                setupSessionLibrary();
+            }
+        });
+    });
+
     // Populate "base on existing plan" dropdown
     if (basePlanSelect) {
         populateBasePlanDropdown();
@@ -1205,6 +1232,17 @@ function createDayEditor(dayName, existingDay = null) {
     const headerRow = document.createElement('div');
     headerRow.className = 'day-editor-header';
     headerRow.innerHTML = `<span class="day-name-label">${dayName}</span>`;
+
+    // Load Session button (shown only when there are saved sessions)
+    const loadSessionBtn = document.createElement('button');
+    loadSessionBtn.type = 'button';
+    loadSessionBtn.className = 'btn btn-sm load-session-btn';
+    loadSessionBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19"/><path d="M9 2v20"/><rect width="15" height="20" x="9" y="2" rx="2"/></svg> Load Session`;
+    loadSessionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openLoadSessionPopover(loadSessionBtn, editor);
+    });
+    headerRow.appendChild(loadSessionBtn);
     editor.appendChild(headerRow);
 
     // Workouts container
@@ -3069,6 +3107,280 @@ function getHealthOverlaysForPlanChart(weeks, raceDate) {
     return annotations;
 }
 
+// ═══════════════════════════════════════════════
+// Session Library
+// ═══════════════════════════════════════════════
+
+function populateCategorySelects() {
+    ['sessionCategory', 'sessionCategoryFilter'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const blank = id === 'sessionCategoryFilter'
+            ? '<option value="">All Categories</option>'
+            : '<option value="">\u2014 No category \u2014</option>';
+        el.innerHTML = blank + sessionCategories.map(c =>
+            `<option value="${c.id}">${escapeHtml(c.name)}</option>`
+        ).join('');
+    });
+}
+
+function setupSessionLibrary() {
+    const container = document.getElementById('sessionDayEditorContainer');
+    if (container && container.children.length === 0) {
+        container.appendChild(createDayEditor('Session', null));
+    }
+    populateCategorySelects();
+    renderSessionLibraryList();
+
+    const searchInput = document.getElementById('sessionSearchInput');
+    const catFilter = document.getElementById('sessionCategoryFilter');
+    if (searchInput) searchInput.addEventListener('input', renderSessionLibraryList);
+    if (catFilter) catFilter.addEventListener('change', renderSessionLibraryList);
+
+    let editingSessionId = null;
+    const saveBtn = document.getElementById('saveSessionBtn');
+    const cancelBtn = document.getElementById('cancelSessionEditBtn');
+    const editorTitle = document.getElementById('sessionEditorTitle');
+
+    function resetSessionEditor() {
+        editingSessionId = null;
+        document.getElementById('sessionName').value = '';
+        document.getElementById('sessionCategory').value = '';
+        document.getElementById('sessionNotes').value = '';
+        const c = document.getElementById('sessionDayEditorContainer');
+        c.innerHTML = '';
+        c.appendChild(createDayEditor('Session', null));
+        if (editorTitle) editorTitle.textContent = 'New Session';
+        if (saveBtn) saveBtn.textContent = 'Save Session';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+    }
+
+    if (cancelBtn) cancelBtn.addEventListener('click', resetSessionEditor);
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            const name = document.getElementById('sessionName').value.trim();
+            if (!name) { document.getElementById('sessionName').focus(); return; }
+
+            const editorEl = document.querySelector('#sessionDayEditorContainer .day-editor');
+            const workoutCard = editorEl ? editorEl.querySelector('.workout-card') : null;
+            if (!workoutCard) return;
+
+            const extracted = extractWorkoutData(workoutCard);
+            const sessionData = {
+                name,
+                categoryId: document.getElementById('sessionCategory').value || null,
+                notes: document.getElementById('sessionNotes').value.trim() || null,
+                workoutType: extracted.structured?.workoutType || 'session',
+                workoutData: extracted.structured,
+                autoDesc: extracted.desc || null
+            };
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving\u2026';
+
+            const result = editingSessionId
+                ? await updateSavedSession(editingSessionId, sessionData)
+                : await createSavedSession(currentUser.id, sessionData);
+
+            if (result.error) {
+                saveBtn.textContent = 'Error \u2014 try again';
+                saveBtn.style.background = 'var(--accent-red)';
+                setTimeout(() => { saveBtn.style.background = ''; saveBtn.disabled = false; saveBtn.textContent = editingSessionId ? 'Update Session' : 'Save Session'; }, 3000);
+            } else {
+                saveBtn.textContent = '\u2713 Saved!';
+                saveBtn.style.background = 'var(--accent-green)';
+                resetSessionEditor();
+                savedSessions = await loadSavedSessions();
+                renderSessionLibraryList();
+                setTimeout(() => { saveBtn.style.background = ''; saveBtn.disabled = false; }, 1500);
+            }
+        });
+    }
+
+    const listEl = document.getElementById('sessionLibraryList');
+    if (listEl) {
+        listEl.addEventListener('click', async (e) => {
+            const editBtn = e.target.closest('.session-edit-btn');
+            const deleteBtn = e.target.closest('.session-delete-btn');
+
+            if (editBtn) {
+                const session = savedSessions.find(s => s.id === editBtn.dataset.id);
+                if (!session) return;
+                editingSessionId = session.id;
+                document.getElementById('sessionName').value = session.name || '';
+                document.getElementById('sessionCategory').value = session.category_id || '';
+                document.getElementById('sessionNotes').value = session.notes || '';
+                const c = document.getElementById('sessionDayEditorContainer');
+                c.innerHTML = '';
+                c.appendChild(createDayEditor('Session', { structured: session.workout_data, type: session.workout_type, desc: session.auto_desc }));
+                if (editorTitle) editorTitle.textContent = 'Edit Session';
+                if (saveBtn) saveBtn.textContent = 'Update Session';
+                if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+                document.getElementById('sessionLibrarySubTab').scrollIntoView({ behavior: 'smooth' });
+            }
+
+            if (deleteBtn) {
+                const session = savedSessions.find(s => s.id === deleteBtn.dataset.id);
+                if (!session || !confirm(`Delete "${session.name}"? This cannot be undone.`)) return;
+                const { error } = await deleteSavedSession(session.id);
+                if (!error) {
+                    savedSessions = await loadSavedSessions();
+                    renderSessionLibraryList();
+                }
+            }
+        });
+    }
+}
+
+function renderSessionLibraryList() {
+    const listEl = document.getElementById('sessionLibraryList');
+    if (!listEl) return;
+    const searchTerm = (document.getElementById('sessionSearchInput')?.value || '').toLowerCase();
+    const catFilter = document.getElementById('sessionCategoryFilter')?.value || '';
+    const filtered = savedSessions.filter(s => {
+        const matchName = !searchTerm || (s.name || '').toLowerCase().includes(searchTerm) || (s.auto_desc || '').toLowerCase().includes(searchTerm);
+        const matchCat = !catFilter || s.category_id === catFilter;
+        return matchName && matchCat;
+    });
+    if (filtered.length === 0) {
+        listEl.innerHTML = `<div class="session-empty-state"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19"/><path d="M9 2v20"/><rect width="15" height="20" x="9" y="2" rx="2"/></svg><p>${searchTerm || catFilter ? 'No sessions match your filter.' : 'No sessions yet. Create one above.'}</p></div>`;
+        return;
+    }
+    listEl.innerHTML = filtered.map(s => {
+        const cat = s.session_categories;
+        const catBadge = cat ? `<span class="session-category-badge" style="color:${cat.color};border-color:${cat.color};">${escapeHtml(cat.name)}</span>` : '';
+        const typeBadge = `<span class="session-type-badge">${s.workout_type || 'session'}</span>`;
+        const creator = s.profiles?.display_name || 'Unknown';
+        const isOwn = s.created_by === currentUser?.id;
+        const desc = s.auto_desc ? (s.auto_desc.length > 120 ? s.auto_desc.substring(0, 120) + '\u2026' : s.auto_desc) : '';
+        return `<div class="session-library-card"><div class="session-card-body"><div class="session-card-meta">${catBadge}${typeBadge}</div><div class="session-card-name">${escapeHtml(s.name)}</div>${desc ? `<div class="session-card-desc">${escapeHtml(desc)}</div>` : ''}<div class="session-card-creator">by ${escapeHtml(creator)}</div></div><div class="session-card-actions">${isOwn ? `<button class="btn btn-sm btn-secondary session-edit-btn" data-id="${s.id}">Edit</button><button class="btn btn-sm btn-secondary session-delete-btn" data-id="${s.id}" style="color:var(--accent-red);border-color:var(--accent-red);">Delete</button>` : ''}</div></div>`;
+    }).join('');
+}
+
+// ─── Load Session Popover ───
+function openLoadSessionPopover(anchorBtn, dayEditor) {
+    document.querySelectorAll('.load-session-popover').forEach(p => p.remove());
+    const popover = document.createElement('div');
+    popover.className = 'load-session-popover';
+
+    if (savedSessions.length === 0) {
+        popover.style.cssText = 'padding:16px;font-size:0.85rem;color:var(--text-secondary);width:280px;';
+        popover.textContent = 'No saved sessions yet. Go to Session Library to create some.';
+        positionPopover(popover, anchorBtn);
+        document.body.appendChild(popover);
+        setTimeout(() => document.addEventListener('click', () => popover.remove(), { once: true }), 0);
+        return;
+    }
+
+    popover.innerHTML = `<div class="load-session-popover-header"><input type="text" placeholder="Search sessions\u2026" id="popoverSearch" autocomplete="off"></div><div class="load-session-popover-list" id="popoverList"></div>`;
+    positionPopover(popover, anchorBtn);
+    document.body.appendChild(popover);
+
+    function renderPopoverList(filter) {
+        const listEl = popover.querySelector('#popoverList');
+        const filtered = savedSessions.filter(s =>
+            !filter || (s.name || '').toLowerCase().includes(filter.toLowerCase()) ||
+            (s.auto_desc || '').toLowerCase().includes(filter.toLowerCase())
+        );
+        if (filtered.length === 0) {
+            listEl.innerHTML = '<div style="padding:12px;color:var(--text-secondary);font-size:0.82rem;">No sessions match.</div>';
+            return;
+        }
+        listEl.innerHTML = filtered.map(s => {
+            const cat = s.session_categories;
+            const dot = cat ? `<span style="width:8px;height:8px;border-radius:50%;background:${cat.color};display:inline-block;flex-shrink:0;margin-right:4px;"></span>` : '';
+            return `<div class="popover-session-row"><div class="popover-session-row-body"><div class="popover-session-row-name">${dot}${escapeHtml(s.name)}</div>${s.auto_desc ? `<div class="popover-session-row-desc">${escapeHtml(s.auto_desc)}</div>` : ''}</div><button class="btn btn-sm btn-primary popover-append-btn" data-id="${s.id}">+ Append</button></div>`;
+        }).join('');
+        listEl.querySelectorAll('.popover-append-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const session = savedSessions.find(s => s.id === btn.dataset.id);
+                if (session) appendSessionToDay(dayEditor, session);
+                popover.remove();
+            });
+        });
+    }
+
+    renderPopoverList('');
+    const searchEl = popover.querySelector('#popoverSearch');
+    searchEl.addEventListener('input', e => renderPopoverList(e.target.value));
+    searchEl.focus();
+    setTimeout(() => document.addEventListener('click', e => { if (!popover.contains(e.target)) popover.remove(); }, { once: true }), 0);
+}
+
+function positionPopover(popover, anchor) {
+    const rect = anchor.getBoundingClientRect();
+    popover.style.position = 'fixed';
+    popover.style.top = (rect.bottom + 4) + 'px';
+    popover.style.left = Math.max(8, rect.left - 200) + 'px';
+}
+
+function appendSessionToDay(dayEditor, session) {
+    const workoutsContainer = dayEditor.querySelector('.workouts-container');
+    const addWorkoutBtn = dayEditor.querySelector('.add-workout-btn');
+    if (!workoutsContainer || !addWorkoutBtn) return;
+    const newCard = createWorkoutCard(workoutsContainer, addWorkoutBtn, {
+        structured: session.workout_data,
+        type: session.workout_type,
+        desc: session.auto_desc
+    });
+    workoutsContainer.appendChild(newCard);
+    collapseWorkout(newCard, addWorkoutBtn);
+}
+
+// ═══════════════════════════════════════════════
+// Settings Panel (admin only)
+// ═══════════════════════════════════════════════
+
+async function setupSettingsPanel() {
+    sessionCategories = await loadSessionCategories();
+    renderCategoryList();
+    const addBtn = document.getElementById('addCategoryBtn');
+    if (!addBtn) return;
+    addBtn.addEventListener('click', async () => {
+        const nameEl = document.getElementById('newCategoryName');
+        const colorEl = document.getElementById('newCategoryColor');
+        const name = nameEl.value.trim();
+        if (!name) { nameEl.focus(); return; }
+        addBtn.disabled = true;
+        addBtn.textContent = 'Saving\u2026';
+        const maxOrder = sessionCategories.reduce((m, c) => Math.max(m, c.sort_order), 0);
+        const { error } = await createSessionCategory({ name, color: colorEl.value, sortOrder: maxOrder + 1 });
+        if (!error) {
+            nameEl.value = '';
+            colorEl.value = '#6B9972';
+            sessionCategories = await loadSessionCategories();
+            renderCategoryList();
+            populateCategorySelects();
+        }
+        addBtn.disabled = false;
+        addBtn.textContent = '+ Add';
+    });
+}
+
+function renderCategoryList() {
+    const listEl = document.getElementById('categoryList');
+    if (!listEl) return;
+    if (sessionCategories.length === 0) {
+        listEl.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85rem;">No categories yet.</p>';
+        return;
+    }
+    listEl.innerHTML = sessionCategories.map(c => `<div class="category-list-item"><span class="category-color-swatch" style="background:${c.color};"></span><span class="category-list-name">${escapeHtml(c.name)}</span><div class="category-list-actions"><button class="btn btn-sm btn-secondary category-delete-btn" data-id="${c.id}" style="color:var(--accent-red);border-color:var(--accent-red);">Delete</button></div></div>`).join('');
+    listEl.querySelectorAll('.category-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const cat = sessionCategories.find(c => c.id === btn.dataset.id);
+            if (!cat || !confirm(`Delete category "${cat.name}"? Sessions using it will lose their category.`)) return;
+            const { error } = await deleteSessionCategory(cat.id);
+            if (!error) {
+                sessionCategories = await loadSessionCategories();
+                renderCategoryList();
+                populateCategorySelects();
+            }
+        });
+    });
+}
+
 // ─── Init ───
 async function init() {
     // Setup tabs
@@ -3087,6 +3399,17 @@ async function init() {
     // Load admin status
     isAdmin = await loadAdminStatus(currentUser.id);
     renderAdminToggle();
+
+    // Load session categories (global, needed for all users)
+    sessionCategories = await loadSessionCategories();
+
+    // Load saved sessions (global library)
+    savedSessions = await loadSavedSessions();
+
+    // Setup admin-only Settings panel
+    if (isAdmin) {
+        setupSettingsPanel();
+    }
 
     // Load profile paces
     await loadUserProfile();
