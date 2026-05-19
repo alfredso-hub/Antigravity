@@ -2371,49 +2371,51 @@ select:focus {
    Session Library & Plan Builder Sub-Tabs
    ═══════════════════════════════════════════════ */
 
-/* Sub-tab bar — pill switcher inside Create Plan */
+/* Sub-tab segmented control */
 .sub-tab-bar {
-    display: flex;
-    gap: 4px;
-    padding: 4px;
-    background: var(--surface);
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    width: fit-content;
-    margin-bottom: 24px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 28px;
 }
 
 .sub-tab-btn {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 8px 18px;
+    gap: 6px;
+    padding: 7px 20px;
     border: none;
-    border-radius: var(--radius-sm);
+    border-radius: 3px;
     background: transparent;
     color: var(--text-secondary);
     font-family: var(--font-display);
-    font-size: 0.95rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: var(--transition);
+    transition: color 0.12s ease, background 0.12s ease;
+    white-space: nowrap;
 }
 
 .sub-tab-btn:hover {
     color: var(--text-main);
-    background: var(--surface-2);
+    background: var(--surface-3);
 }
 
 .sub-tab-btn.active {
-    background: var(--surface-3);
+    background: var(--surface);
     color: var(--accent-text);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--border);
 }
 
 .sub-tab-btn svg {
-    opacity: 0.7;
+    opacity: 0.55;
     flex-shrink: 0;
+    transition: opacity 0.12s ease;
 }
 
 .sub-tab-btn.active svg {
@@ -2429,6 +2431,7 @@ select:focus {
     display: block;
     animation: fadeIn 0.18s ease-out;
 }
+
 
 /* ─── Session Library List ─── */
 .session-filter-bar {

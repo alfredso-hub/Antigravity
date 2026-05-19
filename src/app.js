@@ -3251,8 +3251,8 @@ function renderSessionLibraryList() {
         const cat = s.session_categories;
         const catBadge = cat ? `<span class="session-category-badge" style="color:${cat.color};border-color:${cat.color};">${escapeHtml(cat.name)}</span>` : '';
         const typeBadge = `<span class="session-type-badge">${s.workout_type || 'session'}</span>`;
-        const creator = s.profiles?.display_name || 'Unknown';
         const isOwn = s.created_by === currentUser?.id;
+        const creator = isOwn ? 'you' : '';
         const desc = s.auto_desc ? (s.auto_desc.length > 120 ? s.auto_desc.substring(0, 120) + '\u2026' : s.auto_desc) : '';
         return `<div class="session-library-card"><div class="session-card-body"><div class="session-card-meta">${catBadge}${typeBadge}</div><div class="session-card-name">${escapeHtml(s.name)}</div>${desc ? `<div class="session-card-desc">${escapeHtml(desc)}</div>` : ''}<div class="session-card-creator">by ${escapeHtml(creator)}</div></div><div class="session-card-actions">${isOwn ? `<button class="btn btn-sm btn-secondary session-edit-btn" data-id="${s.id}">Edit</button><button class="btn btn-sm btn-secondary session-delete-btn" data-id="${s.id}" style="color:var(--accent-red);border-color:var(--accent-red);">Delete</button>` : ''}</div></div>`;
     }).join('');
@@ -3366,7 +3366,63 @@ function renderCategoryList() {
         listEl.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85rem;">No categories yet.</p>';
         return;
     }
-    listEl.innerHTML = sessionCategories.map(c => `<div class="category-list-item"><span class="category-color-swatch" style="background:${c.color};"></span><span class="category-list-name">${escapeHtml(c.name)}</span><div class="category-list-actions"><button class="btn btn-sm btn-secondary category-delete-btn" data-id="${c.id}" style="color:var(--accent-red);border-color:var(--accent-red);">Delete</button></div></div>`).join('');
+
+    listEl.innerHTML = sessionCategories.map(c => `
+        <div class="category-list-item" data-id="${c.id}">
+            <span class="category-color-swatch" style="background:${c.color};"></span>
+            <span class="category-list-name">${escapeHtml(c.name)}</span>
+            <div class="category-list-actions">
+                <button class="btn btn-sm btn-secondary category-edit-btn" data-id="${c.id}">Edit</button>
+                <button class="btn btn-sm btn-secondary category-delete-btn" data-id="${c.id}" style="color:var(--accent-red);border-color:var(--accent-red);">Delete</button>
+            </div>
+        </div>`).join('');
+
+    // Wire Edit buttons — replace row content with an inline edit form
+    listEl.querySelectorAll('.category-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const cat = sessionCategories.find(c => c.id === id);
+            if (!cat) return;
+            const row = listEl.querySelector(`.category-list-item[data-id="${id}"]`);
+            row.innerHTML = `
+                <input class="cat-edit-name" type="text" value="${escapeHtml(cat.name)}" style="flex:1;padding:5px 8px;font-size:0.85rem;background:var(--surface-3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-main);">
+                <input class="cat-edit-color" type="color" value="${cat.color}" style="width:36px;height:31px;padding:2px 4px;cursor:pointer;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface-3);">
+                <div class="category-list-actions">
+                    <button class="btn btn-sm btn-primary cat-save-btn" data-id="${id}">Save</button>
+                    <button class="btn btn-sm btn-secondary cat-cancel-btn" data-id="${id}">Cancel</button>
+                </div>`;
+
+            row.querySelector('.cat-cancel-btn').addEventListener('click', () => renderCategoryList());
+
+            row.querySelector('.cat-save-btn').addEventListener('click', async () => {
+                const newName = row.querySelector('.cat-edit-name').value.trim();
+                const newColor = row.querySelector('.cat-edit-color').value;
+                if (!newName) { row.querySelector('.cat-edit-name').focus(); return; }
+                const saveBtn = row.querySelector('.cat-save-btn');
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving\u2026';
+                const cat = sessionCategories.find(c => c.id === id);
+                const { error } = await updateSessionCategory(id, {
+                    name: newName,
+                    color: newColor,
+                    sortOrder: cat?.sort_order ?? 0
+                });
+                if (!error) {
+                    // Refresh categories + sessions so all cards show updated name/colour
+                    sessionCategories = await loadSessionCategories();
+                    savedSessions = await loadSavedSessions();
+                    renderCategoryList();
+                    populateCategorySelects();
+                    renderSessionLibraryList();
+                } else {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save';
+                }
+            });
+        });
+    });
+
+    // Wire Delete buttons
     listEl.querySelectorAll('.category-delete-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const cat = sessionCategories.find(c => c.id === btn.dataset.id);
@@ -3374,8 +3430,10 @@ function renderCategoryList() {
             const { error } = await deleteSessionCategory(cat.id);
             if (!error) {
                 sessionCategories = await loadSessionCategories();
+                savedSessions = await loadSavedSessions();
                 renderCategoryList();
                 populateCategorySelects();
+                renderSessionLibraryList();
             }
         });
     });

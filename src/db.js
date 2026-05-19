@@ -436,7 +436,7 @@ export async function deleteSessionCategory(id) {
 export async function loadSavedSessions() {
     const { data, error } = await supabase
         .from('saved_sessions')
-        .select('*, session_categories(name, color), profiles(display_name)')
+        .select('*, session_categories(name, color)')
         .order('created_at', { ascending: false });
     if (error) console.error('Error loading saved sessions:', error);
     return data || [];
