@@ -3124,18 +3124,66 @@ function populateCategorySelects() {
     });
 }
 
+// Active category pill state (null = All)
+let activeCategoryPill = null;
+
+function renderCategoryPills() {
+    const container = document.getElementById('slCategoryPills');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const allPill = document.createElement('button');
+    allPill.className = 'sl-cat-pill' + (activeCategoryPill === null ? ' active' : '');
+    allPill.style.color = 'var(--accent-text)';
+    allPill.style.borderColor = activeCategoryPill === null ? 'var(--accent)' : '';
+    allPill.textContent = 'All';
+    allPill.addEventListener('click', () => {
+        activeCategoryPill = null;
+        renderCategoryPills();
+        renderSessionLibraryList();
+    });
+    container.appendChild(allPill);
+
+    sessionCategories.forEach(cat => {
+        const pill = document.createElement('button');
+        const isActive = activeCategoryPill === cat.id;
+        pill.className = 'sl-cat-pill' + (isActive ? ' active' : '');
+        pill.style.color = isActive ? cat.color : '';
+        pill.style.borderColor = isActive ? cat.color : '';
+        pill.innerHTML = `<span class="sl-cat-dot" style="background:${cat.color};"></span>${escapeHtml(cat.name)}`;
+        pill.addEventListener('click', () => {
+            activeCategoryPill = isActive ? null : cat.id;
+            renderCategoryPills();
+            renderSessionLibraryList();
+        });
+        container.appendChild(pill);
+    });
+}
+
 function setupSessionLibrary() {
     const container = document.getElementById('sessionDayEditorContainer');
     if (container && container.children.length === 0) {
         container.appendChild(createDayEditor('Session', null));
     }
     populateCategorySelects();
+    renderCategoryPills();
     renderSessionLibraryList();
 
+    // Search
     const searchInput = document.getElementById('sessionSearchInput');
-    const catFilter = document.getElementById('sessionCategoryFilter');
     if (searchInput) searchInput.addEventListener('input', renderSessionLibraryList);
-    if (catFilter) catFilter.addEventListener('change', renderSessionLibraryList);
+
+    // Distance slider
+    const slider = document.getElementById('slDistanceSlider');
+    const sliderVal = document.getElementById('slDistanceValue');
+    if (slider) {
+        slider.addEventListener('input', () => {
+            const v = parseInt(slider.value);
+            sliderVal.textContent = v >= 50 ? 'Any' : `${v} km`;
+            renderSessionLibraryList();
+        });
+    }
 
     let editingSessionId = null;
     const saveBtn = document.getElementById('saveSessionBtn');
@@ -3236,25 +3284,61 @@ function setupSessionLibrary() {
 function renderSessionLibraryList() {
     const listEl = document.getElementById('sessionLibraryList');
     if (!listEl) return;
+
     const searchTerm = (document.getElementById('sessionSearchInput')?.value || '').toLowerCase();
-    const catFilter = document.getElementById('sessionCategoryFilter')?.value || '';
+    const sliderVal = parseInt(document.getElementById('slDistanceSlider')?.value || '50');
+    const maxDist = sliderVal >= 50 ? Infinity : sliderVal;
+
     const filtered = savedSessions.filter(s => {
-        const matchName = !searchTerm || (s.name || '').toLowerCase().includes(searchTerm) || (s.auto_desc || '').toLowerCase().includes(searchTerm);
-        const matchCat = !catFilter || s.category_id === catFilter;
-        return matchName && matchCat;
+        const matchName = !searchTerm ||
+            (s.name || '').toLowerCase().includes(searchTerm) ||
+            (s.auto_desc || '').toLowerCase().includes(searchTerm);
+        const matchCat = !activeCategoryPill || s.category_id === activeCategoryPill;
+        const sessionDist = s.workout_data?.distance ?? s.workout_data?.totalDistance ?? null;
+        const matchDist = maxDist === Infinity || sessionDist === null || sessionDist <= maxDist;
+        return matchName && matchCat && matchDist;
     });
+
+    const hasFilter = searchTerm || activeCategoryPill || maxDist !== Infinity;
+
     if (filtered.length === 0) {
-        listEl.innerHTML = `<div class="session-empty-state"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19"/><path d="M9 2v20"/><rect width="15" height="20" x="9" y="2" rx="2"/></svg><p>${searchTerm || catFilter ? 'No sessions match your filter.' : 'No sessions yet. Create one above.'}</p></div>`;
+        listEl.innerHTML = `<div class="session-empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19"/><path d="M9 2v20"/><rect width="15" height="20" x="9" y="2" rx="2"/></svg>
+            <p>${hasFilter ? 'No sessions match your filters.' : 'No sessions yet. Create one using the editor on the left.'}</p>
+        </div>`;
         return;
     }
+
     listEl.innerHTML = filtered.map(s => {
         const cat = s.session_categories;
-        const catBadge = cat ? `<span class="session-category-badge" style="color:${cat.color};border-color:${cat.color};">${escapeHtml(cat.name)}</span>` : '';
+        const barColor = cat ? cat.color : 'var(--surface-3)';
+        const catBadge = cat
+            ? `<span class="session-category-badge" style="color:${cat.color};border-color:${cat.color};">${escapeHtml(cat.name)}</span>`
+            : '';
         const typeBadge = `<span class="session-type-badge">${s.workout_type || 'session'}</span>`;
         const isOwn = s.created_by === currentUser?.id;
-        const creator = isOwn ? 'you' : '';
-        const desc = s.auto_desc ? (s.auto_desc.length > 120 ? s.auto_desc.substring(0, 120) + '\u2026' : s.auto_desc) : '';
-        return `<div class="session-library-card"><div class="session-card-body"><div class="session-card-meta">${catBadge}${typeBadge}</div><div class="session-card-name">${escapeHtml(s.name)}</div>${desc ? `<div class="session-card-desc">${escapeHtml(desc)}</div>` : ''}<div class="session-card-creator">by ${escapeHtml(creator)}</div></div><div class="session-card-actions">${isOwn ? `<button class="btn btn-sm btn-secondary session-edit-btn" data-id="${s.id}">Edit</button><button class="btn btn-sm btn-secondary session-delete-btn" data-id="${s.id}" style="color:var(--accent-red);border-color:var(--accent-red);">Delete</button>` : ''}</div></div>`;
+        const desc = s.auto_desc || '';
+        // Distance from workout_data
+        const dist = s.workout_data?.distance ?? s.workout_data?.totalDistance ?? null;
+        const distBadge = dist ? `<span class="session-card-dist">${dist} km</span>` : '';
+        const creatorLine = isOwn ? '<span class="session-card-creator">by you</span>' : '';
+        const footer = (distBadge || creatorLine) ? `<div class="session-card-footer">${distBadge}${creatorLine}</div>` : '';
+
+        return `<div class="session-library-card">
+            <div class="session-card-bar" style="background:${barColor};"></div>
+            <div class="session-card-inner">
+                <div class="session-card-body">
+                    <div class="session-card-meta">${catBadge}${typeBadge}</div>
+                    <div class="session-card-name">${escapeHtml(s.name)}</div>
+                    ${desc ? `<div class="session-card-desc">${escapeHtml(desc)}</div>` : ''}
+                    ${footer}
+                </div>
+                <div class="session-card-actions">
+                    ${isOwn ? `<button class="btn btn-sm btn-secondary session-edit-btn" data-id="${s.id}">Edit</button>
+                    <button class="btn btn-sm btn-secondary session-delete-btn" data-id="${s.id}" style="color:var(--accent-red);border-color:var(--accent-red);">Delete</button>` : ''}
+                </div>
+            </div>
+        </div>`;
     }).join('');
 }
 
@@ -3311,9 +3395,16 @@ function openLoadSessionPopover(anchorBtn, dayEditor) {
 
 function positionPopover(popover, anchor) {
     const rect = anchor.getBoundingClientRect();
-    popover.style.position = 'fixed';
-    popover.style.top = (rect.bottom + 4) + 'px';
-    popover.style.left = Math.max(8, rect.left - 200) + 'px';
+    const sidebarWidth = 220; // matches --sidebar-width
+    const popoverW = 360;
+    // Prefer opening below the anchor, shifted left so it's centred-ish
+    let left = Math.max(sidebarWidth + 8, rect.left - 100);
+    // Clamp right edge within viewport
+    if (left + popoverW > window.innerWidth - 8) {
+        left = Math.max(sidebarWidth + 8, window.innerWidth - popoverW - 8);
+    }
+    popover.style.top = (rect.bottom + 6) + 'px';
+    popover.style.left = left + 'px';
 }
 
 function appendSessionToDay(dayEditor, session) {
@@ -3564,6 +3655,21 @@ async function init() {
                 timelineLoaded = true;
                 renderTimelineChart();
                 renderEventsList();
+            }
+        });
+    }
+
+    // Lazy-load session library when tab is first opened
+    const sessionLibTabBtn = document.querySelector('[data-tab="sessionLibraryTab"]');
+    let sessionLibLoaded = false;
+    if (sessionLibTabBtn) {
+        sessionLibTabBtn.addEventListener('click', () => {
+            if (!sessionLibLoaded) {
+                sessionLibLoaded = true;
+                setupSessionLibrary();
+            } else {
+                // Refresh in case new sessions were saved since last visit
+                renderSessionLibraryList();
             }
         });
     }
