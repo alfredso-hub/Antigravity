@@ -748,23 +748,6 @@ function setupCreatePlan() {
     const createPlanForm = document.getElementById('createPlanForm');
     const basePlanSelect = document.getElementById('basePlanSelect');
 
-    // ── Sub-tab wiring ──
-    let sessionLibraryLoaded = false;
-    document.querySelectorAll('.sub-tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const targetId = btn.dataset.subtab;
-            document.querySelectorAll('.sub-tab-content').forEach(p => p.classList.remove('active'));
-            const panel = document.getElementById(targetId);
-            if (panel) panel.classList.add('active');
-            // Lazy-load session library on first visit
-            if (targetId === 'sessionLibrarySubTab' && !sessionLibraryLoaded) {
-                sessionLibraryLoaded = true;
-                setupSessionLibrary();
-            }
-        });
-    });
 
     // Populate "base on existing plan" dropdown
     if (basePlanSelect) {
